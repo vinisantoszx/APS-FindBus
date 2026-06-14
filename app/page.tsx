@@ -6,6 +6,7 @@ import { MapPin, Clock, BusFront, Search, AlertTriangle, Bell } from 'lucide-rea
 
 export default function Home() {
   const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [rotas, setRotas] = useState<any[]>([]);
   const [busca, setBusca] = useState('');
 

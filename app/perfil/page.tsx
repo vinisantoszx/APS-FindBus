@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 export default function Perfil() {
   const [nome, setNome] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [historico, setHistorico] = useState<any[]>([]);
   const supabase = createClient();
 

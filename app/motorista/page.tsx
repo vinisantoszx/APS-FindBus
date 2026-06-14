@@ -5,7 +5,7 @@ import { BusFront, MapPin, CheckCircle } from 'lucide-react';
 
 export default function MotoristaDashboard() {
   const [isTracking, setIsTracking] = useState(false);
-  const [tripId, setTripId] = useState('INSIRA_AQUI_O_ID_DA_VIAGEM_DO_BANCO'); 
+  const [tripId] = useState('ID_DA_VIAGEM_NO_BANCO');
   // No mundo real, esse ID vem após o motorista fazer login e selecionar a rota.
 
   const startTracking = async () => {

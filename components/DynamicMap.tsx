@@ -13,6 +13,7 @@ const icon = L.icon({
 });
 
 export default function DynamicMap() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [trips, setTrips] = useState<any[]>([]);
   // Coordenadas centrais aproximadas da cidade
   const position: [number, number] = [-4.97813, -39.0188];
@@ -20,7 +21,7 @@ export default function DynamicMap() {
   useEffect(() => {
     // 1. Busca inicial das posições dos ônibus ativos
     const fetchTrips = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('trips')
         .select('*, routes(name)')
         .in('status', ['in_transit', 'delayed']);

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BusFront, User, Lock, Mail } from 'lucide-react';
+import { BusFront, Lock, Mail } from 'lucide-react';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
