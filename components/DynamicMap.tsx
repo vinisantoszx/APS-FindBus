@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import { supabase } from '@/lib/supabase';
-// @ts-ignore: side-effect import of CSS file without type declarations
+import { createClient } from '@/utils/supabase/client';
+// @ts-expect-error: side-effect import of CSS file without type declarations
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -18,6 +18,7 @@ export default function DynamicMap() {
   const [trips, setTrips] = useState<any[]>([]);
   // Coordenadas centrais aproximadas da cidade
   const position: [number, number] = [-4.97813, -39.0188];
+  const supabase = createClient();
 
   useEffect(() => {
     // 1. Busca inicial das posições dos ônibus ativos
@@ -49,7 +50,7 @@ export default function DynamicMap() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [supabase]);
 
   return (
     <div className="h-full w-full relative z-0">
