@@ -1,8 +1,29 @@
-// IMPORTANTE: Importe de "@/components/Map" e NÃO do "DynamicMap"
+'use client';
 import Map from '@/components/Map';
+import { supabase } from '@/lib/supabase';
 import { MapPin, Clock, BusFront, Search } from 'lucide-react';
 
 export default function Home() {
+  
+  const handleReportarOcorrencia = async () => {
+    const descricao = prompt("Descreva a ocorrência (Ex: Atraso, Superlotação, Quebra):");
+    
+    if (descricao) {
+      const { error } = await supabase.from('occurrences').insert({
+        user_id: null, // Substitua pelo ID real quando implementar o login
+        route_id: null, 
+        type: 'other',
+        description: descricao
+      });
+
+      if (!error) {
+        alert("Ocorrência registrada! A secretaria foi notificada.");
+      } else {
+        alert("Erro ao registrar ocorrência no banco de dados.");
+      }
+    }
+  };
+
   return (
     <main className="flex h-screen w-full bg-gray-50 overflow-hidden flex-col md:flex-row font-sans">
       <aside className="w-full md:w-80 bg-white shadow-xl flex flex-col z-20">
@@ -27,17 +48,25 @@ export default function Home() {
               <span className="bg-green-100 text-green-800 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider">Em trânsito</span>
             </div>
             <div className="flex items-center text-sm text-gray-600 mb-1 gap-2">
-              <Clock size={14} className="text-emerald-600"/> Próximo: 5 min
+              <Clock size={14} className="text-emerald-600"/> Próximo: Calculando...
             </div>
             <div className="flex items-center text-sm text-gray-600 gap-2">
               <MapPin size={14} className="text-gray-400"/> Próxima: Entrada Campus
             </div>
           </div>
         </div>
+
+        <div className="p-4 border-t bg-gray-50">
+            <button 
+                onClick={handleReportarOcorrencia}
+                className="w-full bg-emerald-500 md:bg-emerald-700 hover:opacity-90 text-white font-medium py-2 rounded-md transition-colors flex justify-center items-center gap-2 text-sm shadow-sm"
+            >
+                Reportar Ocorrência
+            </button>
+        </div>
       </aside>
 
       <section className="flex-1 relative h-[50vh] md:h-full p-2 md:p-4 bg-gray-100">
-        {/* Aqui o mapa entra em ação de forma segura */}
         <Map />
       </section>
     </main>
