@@ -2,8 +2,6 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { createClient } from '@/utils/supabase/client';
-// @ts-expect-error: side-effect import of CSS file without type declarations
-import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
 const icon = L.icon({
