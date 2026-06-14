@@ -1,12 +1,13 @@
 'use client';
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
 import { BusFront, Lock, Mail } from 'lucide-react';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const supabase = createClient();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,13 +16,12 @@ export default function Login() {
       // RF02 - Autenticação
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) alert("Erro ao fazer login: " + error.message);
-      else alert("Login realizado com sucesso! Redirecionando...");
-      // Aqui você adicionaria um router.push('/') para jogar o aluno para o mapa
+      else alert("Login realizado com sucesso! A redirecionar...");
     } else {
-      // RF01 - Cadastro
+      // RF01 - Registo
       const { error } = await supabase.auth.signUp({ email, password });
-      if (error) alert("Erro ao cadastrar: " + error.message);
-      else alert("Cadastro realizado! Verifique seu e-mail.");
+      if (error) alert("Erro ao registar: " + error.message);
+      else alert("Registo realizado! Verifique o seu e-mail.");
     }
   };
 
@@ -34,7 +34,7 @@ export default function Login() {
         </div>
 
         <h2 className="text-xl font-semibold text-center text-gray-600">
-          {isLogin ? 'Acesse sua conta' : 'Crie sua conta'}
+          {isLogin ? 'Aceda à sua conta' : 'Crie a sua conta'}
         </h2>
 
         <form onSubmit={handleAuth} className="space-y-4">
@@ -42,7 +42,7 @@ export default function Login() {
             <Mail className="absolute left-3 top-3 text-gray-400" size={18} />
             <input 
               type="email" 
-              placeholder="Seu e-mail" 
+              placeholder="O seu e-mail" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" 
@@ -54,7 +54,7 @@ export default function Login() {
             <Lock className="absolute left-3 top-3 text-gray-400" size={18} />
             <input 
               type="password" 
-              placeholder="Sua senha" 
+              placeholder="A sua palavra-passe" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" 
@@ -63,14 +63,14 @@ export default function Login() {
           </div>
 
           <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-md transition-colors">
-            {isLogin ? 'Entrar' : 'Cadastrar'}
+            {isLogin ? 'Entrar' : 'Registar'}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-4">
           {isLogin ? "Ainda não tem conta?" : "Já possui uma conta?"}{' '}
           <button onClick={() => setIsLogin(!isLogin)} className="text-emerald-600 font-semibold hover:underline">
-            {isLogin ? "Cadastre-se" : "Faça Login"}
+            {isLogin ? "Registe-se" : "Faça Login"}
           </button>
         </p>
       </div>
