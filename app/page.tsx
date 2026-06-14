@@ -6,21 +6,43 @@ import { MapPin, Clock, BusFront, Search, AlertTriangle, Bell } from 'lucide-rea
 
 export default function Home() {
   const supabase = createClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [rotas, setRotas] = useState<any[]>([]);
+  interface Trip {
+    status: string;
+    eta_next_stop?: string;
+  }
+
+  interface Route {
+    id: number;
+    name: string;
+    description?: string;
+    trips?: Trip[];
+  }
+
+  const [rotas, setRotas] = useState<Route[]>([]);
+
   const [busca, setBusca] = useState('');
 
   useEffect(() => {
     const fetchRotas = async () => {
-      // Busca rotas e as viagens ativas atreladas a elas
-      const { data } = await supabase.from('routes').select(`
-        id, name, description,
-        trips ( status, eta_next_stop )
+      const { data, error } = await supabase
+        .from('routes')
+        .select(`
+        id,
+        name,
+        description,
+        trips(status, eta_next_stop)
       `);
-      if (data) setRotas(data);
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      setRotas(data ?? []);
     };
+
     fetchRotas();
-  }, [supabase]);
+  }, [supabase]);s
 
   const handleReportar = async () => {
     const desc = prompt("Descreva a ocorrência (Ex: Atraso, Quebra):");
@@ -31,7 +53,9 @@ export default function Home() {
   };
 
   // RF20 - Busca de rotas
-  const rotasFiltradas = rotas.filter(r => r.name.toLowerCase().includes(busca.toLowerCase()));
+  const rotasFiltradas = rotas.filter((r) =>
+    (r.name ?? '').toLowerCase().includes(busca.toLowerCase())
+  );
 
   return (
     <main className="flex h-screen w-full bg-gray-50 overflow-hidden flex-col md:flex-row font-sans">
@@ -45,21 +69,21 @@ export default function Home() {
         </div>
 
         <div className="p-4 border-b">
-            <div className="relative">
-                <Search className="absolute left-3 top-3 text-gray-400" size={18} />
-                <input 
-                  type="text" 
-                  placeholder="Buscar rota..." 
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" 
-                />
-            </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Buscar rota..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+            />
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Ativas</h2>
-          
+
           {rotasFiltradas.map((rota) => {
             const viagemAtiva = rota.trips?.[0];
             const isDelayed = viagemAtiva?.status === 'delayed';
@@ -75,11 +99,11 @@ export default function Home() {
                 {viagemAtiva && (
                   <>
                     <div className="flex items-center text-sm text-gray-600 mb-1 gap-2">
-                      {isDelayed ? <AlertTriangle size={14} className="text-red-500"/> : <Clock size={14} className="text-emerald-600"/>}
+                      {isDelayed ? <AlertTriangle size={14} className="text-red-500" /> : <Clock size={14} className="text-emerald-600" />}
                       {viagemAtiva.eta_next_stop || 'Calculando...'}
                     </div>
                     <div className="flex items-center text-sm text-gray-600 gap-2">
-                      <MapPin size={14} className="text-gray-400"/> Próxima parada estimada
+                      <MapPin size={14} className="text-gray-400" /> Próxima parada estimada
                     </div>
                   </>
                 )}
@@ -89,9 +113,9 @@ export default function Home() {
         </div>
 
         <div className="p-4 border-t bg-gray-50">
-            <button onClick={handleReportar} className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm">
-                Reportar Ocorrência
-            </button>
+          <button onClick={handleReportar} className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm">
+            Reportar Ocorrência
+          </button>
         </div>
       </aside>
 

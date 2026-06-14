@@ -1,4 +1,7 @@
 'use client';
+
+import 'leaflet/dist/leaflet.css';
+
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { createClient } from '@/utils/supabase/client';
@@ -13,7 +16,18 @@ const icon = L.icon({
 
 export default function DynamicMap() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [trips, setTrips] = useState<any[]>([]);
+  interface Trip {
+  id: number;
+  current_lat: number;
+  current_lng: number;
+  status: string;
+  eta_next_stop?: string;
+  routes?: {
+    name: string;
+  };
+}
+
+const [trips, setTrips] = useState<Trip[]>([]);
   // Coordenadas centrais aproximadas da cidade
   const position: [number, number] = [-4.97813, -39.0188];
   const supabase = createClient();
