@@ -42,7 +42,7 @@ export default function Home() {
     };
 
     fetchRotas();
-  }, [supabase]);s
+  }, [supabase]);
 
   const handleReportar = async () => {
     const desc = prompt("Descreva a ocorrência (Ex: Atraso, Quebra):");
