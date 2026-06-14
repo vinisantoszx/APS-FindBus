@@ -1,6 +1,6 @@
 // IMPORTANTE: Importe de "@/components/Map" e NÃO do "DynamicMap"
 import Map from '@/components/Map';
-import { MapPin, Clock, AlertTriangle, BusFront, Search } from 'lucide-react';
+import { MapPin, Clock, BusFront, Search } from 'lucide-react';
 
 export default function Home() {
   return (
