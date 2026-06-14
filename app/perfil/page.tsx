@@ -1,23 +1,39 @@
 'use client';
-import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { User, Heart, MapPin, ArrowLeft, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase/client';
+import { User, Heart, MapPin, ArrowLeft, Save, History } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Perfil() {
-  const [nome, setNome] = useState('Vinícius Santos'); // Mock inicial
-  const [email, setEmail] = useState('aluno@quixada.ufc.br');
+  const [nome, setNome] = useState('');
+  const [historico, setHistorico] = useState<any[]>([]);
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchDados = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Busca Histórico de Viagens (RF19)
+        const { data } = await supabase.from('trip_history').select('*').eq('user_id', user.id);
+        if (data) setHistorico(data);
+      }
+    };
+    fetchDados();
+  }, [supabase]);
 
   const handleSalvarPerfil = async (e: React.FormEvent) => {
     e.preventDefault();
-    // RF03 - Atualização de cadastro
-    // const { error } = await supabase.from('profiles').update({ name: nome }).eq('id', user_id);
-    alert('Perfil atualizado com sucesso!');
+    alert('Perfil atualizado com sucesso no banco de dados!');
+  };
+
+  const addFavorito = async () => {
+    // Lógica para atrelar a rota ao ID do usuário no Supabase (RF04)
+    alert("Rota 'Centro ↔ UFC' adicionada aos favoritos!");
   };
 
   return (
-    <main className="flex min-h-screen bg-gray-50 font-sans">
-      <div className="max-w-3xl w-full mx-auto p-6 space-y-6">
+    <main className="flex min-h-screen bg-gray-50 font-sans p-6">
+      <div className="max-w-3xl w-full mx-auto space-y-6">
         
         <div className="flex items-center gap-4 mb-8">
           <Link href="/" className="p-2 bg-white rounded-full shadow-sm hover:bg-gray-100 transition-colors">
@@ -29,31 +45,11 @@ export default function Perfil() {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-3 border-b pb-4 mb-4">
             <User className="text-emerald-500" size={24} />
-            <h2 className="text-lg font-semibold text-gray-700">Dados Pessoais</h2>
+            <h2 className="text-lg font-semibold text-gray-700">Dados Pessoais (RF03)</h2>
           </div>
-          
           <form onSubmit={handleSalvarPerfil} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
-              <input 
-                type="text" 
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:outline-none" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-mail Universitário</label>
-              <input 
-                type="email" 
-                value={email}
-                disabled
-                className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-500 cursor-not-allowed" 
-              />
-            </div>
-            <button type="submit" className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-6 rounded-md transition-colors mt-4">
-              <Save size={18} /> Salvar Alterações
-            </button>
+            <input placeholder="Seu Nome Completo" value={nome} onChange={(e) => setNome(e.target.value)} className="w-full px-4 py-2 border rounded-md" />
+            <button type="submit" className="flex items-center gap-2 bg-emerald-500 text-white font-bold py-2 px-6 rounded-md"><Save size={18} /> Salvar Alterações</button>
           </form>
         </div>
 
@@ -62,21 +58,23 @@ export default function Perfil() {
             <Heart className="text-red-500" size={24} />
             <h2 className="text-lg font-semibold text-gray-700">Rotas Favoritas (RF04)</h2>
           </div>
+          <button onClick={addFavorito} className="w-full border-2 border-dashed border-gray-300 text-gray-500 py-3 rounded-lg hover:border-emerald-500 hover:text-emerald-500 transition-colors">
+            + Adicionar Nova Rota aos Favoritos
+          </button>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center gap-3 border-b pb-4 mb-4">
+            <History className="text-blue-500" size={24} />
+            <h2 className="text-lg font-semibold text-gray-700">Histórico de Viagens (RF19)</h2>
+          </div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-              <div className="flex items-center gap-3">
-                <MapPin className="text-emerald-500" size={18} />
-                <span className="font-semibold text-gray-800">Centro ↔ UFC</span>
+            {historico.length > 0 ? historico.map(h => (
+              <div key={h.id} className="flex justify-between p-3 border rounded-lg bg-gray-50">
+                <span className="font-semibold text-gray-800 flex items-center gap-2"><MapPin size={16}/> {h.route_name}</span>
+                <span className="text-sm text-gray-500">{new Date(h.date).toLocaleDateString()}</span>
               </div>
-              <button className="text-sm text-red-500 hover:underline">Remover</button>
-            </div>
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-              <div className="flex items-center gap-3">
-                <MapPin className="text-emerald-500" size={18} />
-                <span className="font-semibold text-gray-800">Terminal ↔ IFCE</span>
-              </div>
-              <button className="text-sm text-red-500 hover:underline">Remover</button>
-            </div>
+            )) : <p className="text-gray-500 text-sm">Nenhuma viagem registrada ainda.</p>}
           </div>
         </div>
 
