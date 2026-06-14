@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { supabase } from '@/lib/supabase';
+// @ts-ignore: side-effect import of CSS file without type declarations
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
