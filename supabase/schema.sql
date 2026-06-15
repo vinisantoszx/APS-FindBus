@@ -44,6 +44,10 @@ create table if not exists public.stops (
   created_at timestamptz not null default now()
 );
 
+alter table public.stops add column if not exists route_id bigint references public.routes(id) on delete set null;
+alter table public.stops add column if not exists sequence_order integer not null default 1;
+alter table public.stops add column if not exists created_at timestamptz not null default now();
+
 create table if not exists public.trips (
   id bigint generated always as identity primary key,
   route_id bigint references public.routes(id) on delete set null,
