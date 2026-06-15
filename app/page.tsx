@@ -1,83 +1,102 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bell, BusFront, Clock, MapPin, Search } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Bell, BookOpen, BusFront, Clock, GraduationCap, Heart, MapPin, Search, ShieldCheck, UserRound } from 'lucide-react';
 import Map from '@/components/Map';
-import { createClient } from '@/utils/supabase/client';
 
-type Trip = {
-  status: string;
-  eta_next_stop?: string | null;
-};
-
-type Route = {
+type RotaFixa = {
   id: number;
-  name: string;
-  description?: string | null;
-  trips?: Trip[] | null;
+  nome: string;
+  descricao: string;
+  status: 'Em trânsito' | 'Atrasado' | 'Aguardando';
+  eta: string;
+  parada: string;
+  favorita?: boolean;
 };
+
+const rotasAtivas: RotaFixa[] = [
+  {
+    id: 1,
+    nome: 'Rota UFC Campus Quixadá',
+    descricao: 'Rodoviária • Centro • UFC',
+    status: 'Em trânsito',
+    eta: 'Chegada estimada em 8 min',
+    parada: 'Próxima parada: Rodoviária de Quixadá',
+    favorita: true,
+  },
+  {
+    id: 2,
+    nome: 'Rota Universitária Centro',
+    descricao: 'Centro • IFCE • Unicatólica • UFC',
+    status: 'Atrasado',
+    eta: 'Atraso aproximado de 12 min',
+    parada: 'Próxima parada: Praça José de Barros',
+    favorita: true,
+  },
+  {
+    id: 3,
+    nome: 'Rota Noturna Universitária',
+    descricao: 'UFC • Terminal • Bairros',
+    status: 'Aguardando',
+    eta: 'Saída prevista às 18:20',
+    parada: 'Ponto inicial: Campus UFC',
+  },
+];
 
 export default function Home() {
-  const supabase = useMemo(() => createClient(), []);
-  const [rotas, setRotas] = useState<Route[]>([]);
   const [busca, setBusca] = useState('');
 
-  useEffect(() => {
-    const fetchRotas = async () => {
-      const { data, error } = await supabase
-        .from('routes')
-        .select(`
-          id,
-          name,
-          description,
-          trips(status, eta_next_stop)
-        `);
-
-      if (error) {
-        console.error('Erro ao buscar rotas:', error.message);
-        return;
-      }
-
-      setRotas((data ?? []) as Route[]);
-    };
-
-    fetchRotas();
-  }, [supabase]);
-
-  const handleReportar = async () => {
-    const desc = prompt('Descreva a ocorrência (Ex: Atraso, Quebra):');
-    const description = desc?.trim();
-
-    if (!description) return;
-
-    const { error } = await supabase.from('occurrences').insert({
-      type: 'other',
-      description,
-    });
-
-    if (error) {
-      alert('Não foi possível registrar a ocorrência. Tente novamente.');
-      console.error('Erro ao registrar ocorrência:', error.message);
-      return;
-    }
-
-    alert('Ocorrência registrada!');
-  };
-
-  const rotasFiltradas = rotas.filter((rota) =>
-    rota.name.toLowerCase().includes(busca.toLowerCase()),
+  const rotasFiltradas = rotasAtivas.filter((rota) =>
+    rota.nome.toLowerCase().includes(busca.toLowerCase()),
   );
+
+  const rotasFavoritas = rotasAtivas.filter((rota) => rota.favorita);
+
+  const handleReportar = () => {
+    alert('Protótipo visual: aqui o estudante registraria atraso, superlotação, falha mecânica ou problema de segurança.');
+  };
 
   return (
     <main className="flex h-screen w-full bg-gray-50 overflow-hidden flex-col md:flex-row font-sans">
-      <aside className="w-full md:w-80 bg-white shadow-xl flex flex-col z-20">
-        <div className="p-6 bg-emerald-500 md:bg-emerald-700 flex items-center justify-between text-white transition-colors">
+      <aside className="w-full md:w-[380px] bg-white shadow-xl flex flex-col z-20">
+        <div className="p-6 bg-emerald-600 md:bg-emerald-700 flex items-center justify-between text-white transition-colors">
           <div className="flex items-center gap-3">
             <BusFront size={28} />
-            <h1 className="text-2xl font-bold tracking-tight">FindBus</h1>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">FindBus</h1>
+              <p className="text-xs text-emerald-100">Transporte universitário em tempo real</p>
+            </div>
           </div>
           <Bell size={20} className="cursor-pointer hover:text-emerald-200" />
         </div>
+
+        <section className="p-4 border-b bg-emerald-50">
+          <div className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-11 w-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <UserRound size={22} />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">Conta do estudante</p>
+                <h2 className="text-base font-bold text-gray-800">Antônio Vinícius Silva Santos</h2>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <GraduationCap size={16} className="text-emerald-600" />
+                Universidade Federal do Ceará - Campus Quixadá
+              </div>
+              <div className="flex items-center gap-2">
+                <BookOpen size={16} className="text-emerald-600" />
+                Análise e Projeto de Sistemas
+              </div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={16} className="text-emerald-600" />
+                Perfil estudantil verificado para rotas universitárias
+              </div>
+            </div>
+          </div>
+        </section>
 
         <div className="p-4 border-b">
           <div className="relative">
@@ -92,48 +111,66 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Ativas</h2>
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <section>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Favoritas</h2>
+            <div className="space-y-3">
+              {rotasFavoritas.map((rota) => (
+                <div key={rota.id} className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                  <div className="flex items-start gap-2">
+                    <Heart size={16} className="text-emerald-600 fill-emerald-600 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
+                      <p className="text-xs text-gray-500">{rota.descricao}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
 
-          {rotasFiltradas.map((rota) => {
-            const viagemAtiva = rota.trips?.[0];
-            const isDelayed = viagemAtiva?.status === 'delayed';
+          <section>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Ativas</h2>
+            <div className="space-y-4">
+              {rotasFiltradas.map((rota) => {
+                const isDelayed = rota.status === 'Atrasado';
 
-            return (
-              <div
-                key={rota.id}
-                className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${
-                  isDelayed ? 'border-red-200' : 'hover:border-emerald-500'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-gray-800 text-sm">{rota.name}</h3>
-                  <span
-                    className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${
-                      isDelayed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                return (
+                  <div
+                    key={rota.id}
+                    className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${
+                      isDelayed ? 'border-red-200' : 'hover:border-emerald-500'
                     }`}
                   >
-                    {isDelayed ? 'Atrasado' : viagemAtiva ? 'Em trânsito' : 'Aguardando'}
-                  </span>
-                </div>
-                {viagemAtiva && (
-                  <>
+                    <div className="flex justify-between items-start mb-2 gap-3">
+                      <div>
+                        <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
+                        <p className="text-xs text-gray-500">{rota.descricao}</p>
+                      </div>
+                      <span
+                        className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider whitespace-nowrap ${
+                          isDelayed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                        }`}
+                      >
+                        {rota.status}
+                      </span>
+                    </div>
                     <div className="flex items-center text-sm text-gray-600 mb-1 gap-2">
                       {isDelayed ? (
                         <AlertTriangle size={14} className="text-red-500" />
                       ) : (
                         <Clock size={14} className="text-emerald-600" />
                       )}
-                      {viagemAtiva.eta_next_stop || 'Calculando...'}
+                      {rota.eta}
                     </div>
                     <div className="flex items-center text-sm text-gray-600 gap-2">
-                      <MapPin size={14} className="text-gray-400" /> Próxima parada estimada
+                      <MapPin size={14} className="text-gray-400" /> {rota.parada}
                     </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
         <div className="p-4 border-t bg-gray-50">
