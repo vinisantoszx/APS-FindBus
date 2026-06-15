@@ -15,7 +15,7 @@ import {
   Star,
   UsersRound,
 } from 'lucide-react';
-import Map from '@/components/Map';
+import MapView from '@/components/Map';
 import { createClient } from '@/utils/supabase/client';
 
 type AbaAtiva = 'monitoramento' | 'veiculos' | 'rotas' | 'paradas' | 'relatorios';
@@ -58,8 +58,8 @@ type OccurrenceRecord = {
   route_id: RecordId | null;
   type: string;
   description: string;
-  status: string;
-  created_at: string;
+  status?: string | null;
+  created_at?: string | null;
 };
 
 type RatingRecord = {
@@ -225,7 +225,7 @@ export default function AdminDashboard() {
     carregarDados();
   }, [carregarDados]);
 
-  const rotasPorId = useMemo(() => new Map(rotas.map((rota) => [String(rota.id), rota])), [rotas]);
+  const rotasPorId = useMemo(() => new globalThis.Map(rotas.map((rota) => [String(rota.id), rota])), [rotas]);
 
   const veiculosComViagem = useMemo(
     () =>
@@ -435,7 +435,7 @@ export default function AdminDashboard() {
                 <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold">Supabase</span>
               </div>
               <div className="h-[485px]">
-                <Map />
+                <MapView />
               </div>
             </div>
 
