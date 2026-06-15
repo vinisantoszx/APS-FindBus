@@ -2,6 +2,7 @@
 -- Execute este arquivo no SQL Editor se aparecer erro de coluna ausente, como:
 -- Could not find the 'active' column of 'routes' in the schema cache
 -- column stops.route_id does not exist
+-- column occurrences.status does not exist
 --
 -- Este script detecta automaticamente o tipo de public.routes.id.
 -- Assim ele funciona tanto em bancos com routes.id uuid quanto bigint.
@@ -60,8 +61,26 @@ END $$;
 alter table public.stops add column if not exists sequence_order integer not null default 1;
 alter table public.stops add column if not exists created_at timestamptz not null default now();
 
+alter table public.occurrences add column if not exists status text not null default 'open';
+alter table public.occurrences add column if not exists created_at timestamptz not null default now();
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.occurrences'::regclass
+      and conname = 'occurrences_status_check'
+  ) then
+    alter table public.occurrences
+      add constraint occurrences_status_check
+      check (status in ('open', 'in_review', 'resolved'));
+  end if;
+end $$;
+
 update public.routes set active = true where active is null;
 update public.vehicles set active = true where active is null;
 update public.stops set sequence_order = 1 where sequence_order is null;
+update public.occurrences set status = 'open' where status is null;
 
 notify pgrst, 'reload schema';
