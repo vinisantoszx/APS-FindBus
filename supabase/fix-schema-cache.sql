@@ -12,6 +12,8 @@ alter table public.vehicles add column if not exists active boolean not null def
 DO $$
 DECLARE
   route_id_type text;
+  stop_route_id_type text;
+  has_stop_route_values boolean;
 BEGIN
   SELECT format_type(attribute.atttypid, attribute.atttypmod)
   INTO route_id_type
@@ -24,13 +26,24 @@ BEGIN
     RAISE EXCEPTION 'Não foi possível identificar o tipo da coluna public.routes.id.';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'stops'
-      AND column_name = 'route_id'
-  ) THEN
+  SELECT format_type(attribute.atttypid, attribute.atttypmod)
+  INTO stop_route_id_type
+  FROM pg_attribute attribute
+  WHERE attribute.attrelid = 'public.stops'::regclass
+    AND attribute.attname = 'route_id'
+    AND NOT attribute.attisdropped;
+
+  IF stop_route_id_type IS NULL THEN
+    EXECUTE format('alter table public.stops add column route_id %s', route_id_type);
+  ELSIF stop_route_id_type <> route_id_type THEN
+    EXECUTE 'select exists (select 1 from public.stops where route_id is not null)'
+    INTO has_stop_route_values;
+
+    IF has_stop_route_values THEN
+      RAISE EXCEPTION 'A coluna public.stops.route_id existe como %, mas public.routes.id é %. Como há valores preenchidos em stops.route_id, corrija esses dados antes de trocar o tipo.', stop_route_id_type, route_id_type;
+    END IF;
+
+    EXECUTE 'alter table public.stops drop column route_id';
     EXECUTE format('alter table public.stops add column route_id %s', route_id_type);
   END IF;
 
