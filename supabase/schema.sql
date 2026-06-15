@@ -29,6 +29,11 @@ create table if not exists public.vehicles (
   created_at timestamptz not null default now()
 );
 
+-- Ajustes idempotentes para bancos criados antes das últimas alterações do protótipo.
+-- O create table if not exists não modifica tabelas já existentes; por isso mantemos estes alters.
+alter table public.routes add column if not exists active boolean not null default true;
+alter table public.vehicles add column if not exists active boolean not null default true;
+
 create table if not exists public.stops (
   id bigint generated always as identity primary key,
   route_id bigint references public.routes(id) on delete set null,
@@ -163,3 +168,6 @@ create policy "ratings_insert_authenticated" on public.service_ratings
 drop policy if exists "ratings_read_all" on public.service_ratings;
 create policy "ratings_read_all" on public.service_ratings
   for select using (true);
+
+-- Força o PostgREST/Supabase a recarregar o cache do schema após alterações.
+notify pgrst, 'reload schema';
