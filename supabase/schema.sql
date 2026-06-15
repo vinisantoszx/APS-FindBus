@@ -1,5 +1,7 @@
 -- Schema base para testar o FindBus localmente no Supabase.
 -- Pode ser executado no SQL Editor do Supabase ou via Supabase CLI.
+-- Atenção: as políticas de escrita abaixo são permissivas para protótipo/local.
+-- Em produção, restrinja por perfil de administrador.
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -106,17 +108,33 @@ drop policy if exists "routes_read_all" on public.routes;
 create policy "routes_read_all" on public.routes
   for select using (true);
 
+drop policy if exists "routes_write_for_prototype" on public.routes;
+create policy "routes_write_for_prototype" on public.routes
+  for all using (true) with check (true);
+
 drop policy if exists "vehicles_read_all" on public.vehicles;
 create policy "vehicles_read_all" on public.vehicles
   for select using (true);
+
+drop policy if exists "vehicles_write_for_prototype" on public.vehicles;
+create policy "vehicles_write_for_prototype" on public.vehicles
+  for all using (true) with check (true);
 
 drop policy if exists "stops_read_all" on public.stops;
 create policy "stops_read_all" on public.stops
   for select using (true);
 
+drop policy if exists "stops_write_for_prototype" on public.stops;
+create policy "stops_write_for_prototype" on public.stops
+  for all using (true) with check (true);
+
 drop policy if exists "trips_read_all" on public.trips;
 create policy "trips_read_all" on public.trips
   for select using (true);
+
+drop policy if exists "trips_write_for_prototype" on public.trips;
+create policy "trips_write_for_prototype" on public.trips
+  for all using (true) with check (true);
 
 drop policy if exists "favorites_read_own" on public.route_favorites;
 create policy "favorites_read_own" on public.route_favorites
