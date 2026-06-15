@@ -19,9 +19,10 @@ import Map from '@/components/Map';
 import { createClient } from '@/utils/supabase/client';
 
 type AbaAtiva = 'monitoramento' | 'veiculos' | 'rotas' | 'paradas' | 'relatorios';
+type RecordId = string | number;
 
 type VehicleRecord = {
-  id: number;
+  id: RecordId;
   plate: string;
   model: string;
   capacity: number;
@@ -29,15 +30,15 @@ type VehicleRecord = {
 };
 
 type RouteRecord = {
-  id: number;
+  id: RecordId;
   name: string;
   description: string | null;
   active: boolean;
 };
 
 type StopRecord = {
-  id: number;
-  route_id: number | null;
+  id: RecordId;
+  route_id: RecordId | null;
   name: string;
   latitude: number;
   longitude: number;
@@ -45,16 +46,16 @@ type StopRecord = {
 };
 
 type TripRecord = {
-  id: number;
-  route_id: number | null;
-  vehicle_id: number | null;
+  id: RecordId;
+  route_id: RecordId | null;
+  vehicle_id: RecordId | null;
   status: string;
   eta_next_stop: string | null;
 };
 
 type OccurrenceRecord = {
-  id: number;
-  route_id: number | null;
+  id: RecordId;
+  route_id: RecordId | null;
   type: string;
   description: string;
   status: string;
@@ -150,6 +151,11 @@ function getSupabaseConnectionMessage(error: unknown) {
   return `Erro ao carregar painel: ${message}`;
 }
 
+function sameId(left: RecordId | null | undefined, right: RecordId | null | undefined) {
+  if (left === null || left === undefined || right === null || right === undefined) return false;
+  return String(left) === String(right);
+}
+
 export default function AdminDashboard() {
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('monitoramento');
   const [veiculos, setVeiculos] = useState<VehicleRecord[]>([]);
@@ -219,13 +225,13 @@ export default function AdminDashboard() {
     carregarDados();
   }, [carregarDados]);
 
-  const rotasPorId = useMemo(() => new Map(rotas.map((rota) => [rota.id, rota])), [rotas]);
+  const rotasPorId = useMemo(() => new Map(rotas.map((rota) => [String(rota.id), rota])), [rotas]);
 
   const veiculosComViagem = useMemo(
     () =>
       veiculos.map((veiculo) => {
-        const viagem = viagens.find((item) => item.vehicle_id === veiculo.id && ['in_transit', 'delayed', 'waiting'].includes(item.status));
-        const rota = viagem?.route_id ? rotasPorId.get(viagem.route_id) : null;
+        const viagem = viagens.find((item) => sameId(item.vehicle_id, veiculo.id) && ['in_transit', 'delayed', 'waiting'].includes(item.status));
+        const rota = viagem?.route_id ? rotasPorId.get(String(viagem.route_id)) : null;
 
         return {
           ...veiculo,
@@ -318,6 +324,8 @@ export default function AdminDashboard() {
       return;
     }
 
+    const rotaSelecionada = rotas.find((rota) => String(rota.id) === stopForm.routeId);
+
     setSalvando(true);
 
     try {
@@ -325,7 +333,7 @@ export default function AdminDashboard() {
         name: stopForm.name.trim(),
         latitude: Number(stopForm.latitude),
         longitude: Number(stopForm.longitude),
-        route_id: stopForm.routeId ? Number(stopForm.routeId) : null,
+        route_id: rotaSelecionada?.id ?? null,
         sequence_order: paradas.length + 1,
       });
 
@@ -434,7 +442,7 @@ export default function AdminDashboard() {
             <div className="space-y-4">
               {veiculosComViagem.length === 0 && <p className="rounded-2xl border bg-white p-5 text-sm text-gray-500">Nenhum veículo encontrado.</p>}
               {veiculosComViagem.map((veiculo) => (
-                <div key={veiculo.id} className="bg-white rounded-2xl border p-5 shadow-sm">
+                <div key={String(veiculo.id)} className="bg-white rounded-2xl border p-5 shadow-sm">
                   <div className="flex justify-between gap-3 mb-3">
                     <div>
                       <h4 className="font-bold text-gray-900">{veiculo.model}</h4>
@@ -465,7 +473,7 @@ export default function AdminDashboard() {
             </form>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {veiculosComViagem.map((veiculo) => (
-                <div key={veiculo.id} className="bg-white border rounded-2xl p-6 shadow-sm">
+                <div key={String(veiculo.id)} className="bg-white border rounded-2xl p-6 shadow-sm">
                   <BusFront className="text-emerald-600 mb-4" size={32} />
                   <h3 className="text-xl font-bold text-gray-900">{veiculo.model}</h3>
                   <p className="text-gray-500 mb-4">Placa {veiculo.plate}</p>
@@ -490,10 +498,10 @@ export default function AdminDashboard() {
             </form>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {rotas.map((rota) => {
-                const viagem = viagens.find((item) => item.route_id === rota.id && ['in_transit', 'delayed', 'waiting'].includes(item.status));
+                const viagem = viagens.find((item) => sameId(item.route_id, rota.id) && ['in_transit', 'delayed', 'waiting'].includes(item.status));
 
                 return (
-                  <div key={rota.id} className="bg-white border rounded-2xl p-6 shadow-sm">
+                  <div key={String(rota.id)} className="bg-white border rounded-2xl p-6 shadow-sm">
                     <MapIcon className="text-emerald-600 mb-4" size={32} />
                     <h3 className="text-xl font-bold text-gray-900">{rota.name}</h3>
                     <p className="text-gray-500 mb-4">{rota.description}</p>
@@ -515,7 +523,7 @@ export default function AdminDashboard() {
               <input value={stopForm.name} onChange={(event) => setStopForm({ ...stopForm, name: event.target.value })} placeholder="Nome da parada" className="w-full border rounded-lg px-3 py-2" required />
               <select value={stopForm.routeId} onChange={(event) => setStopForm({ ...stopForm, routeId: event.target.value })} className="w-full border rounded-lg px-3 py-2">
                 <option value="">Sem rota vinculada</option>
-                {rotas.map((rota) => <option key={rota.id} value={rota.id}>{rota.name}</option>)}
+                {rotas.map((rota) => <option key={String(rota.id)} value={String(rota.id)}>{rota.name}</option>)}
               </select>
               <input value={stopForm.latitude} onChange={(event) => setStopForm({ ...stopForm, latitude: event.target.value })} type="number" step="any" placeholder="Latitude" className="w-full border rounded-lg px-3 py-2" required />
               <input value={stopForm.longitude} onChange={(event) => setStopForm({ ...stopForm, longitude: event.target.value })} type="number" step="any" placeholder="Longitude" className="w-full border rounded-lg px-3 py-2" required />
@@ -526,11 +534,11 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {paradas.length === 0 && <p className="text-sm text-gray-500">Nenhum ponto de parada encontrado.</p>}
                 {paradas.map((parada, index) => (
-                  <div key={parada.id} className="flex items-center gap-4 border rounded-xl p-4">
+                  <div key={String(parada.id)} className="flex items-center gap-4 border rounded-xl p-4">
                     <div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">{index + 1}</div>
                     <div>
                       <p className="font-semibold text-gray-800">{parada.name}</p>
-                      <p className="text-sm text-gray-500">{rotasPorId.get(parada.route_id ?? 0)?.name ?? 'Sem rota vinculada'} • {parada.latitude}, {parada.longitude}</p>
+                      <p className="text-sm text-gray-500">{parada.route_id ? rotasPorId.get(String(parada.route_id))?.name : 'Sem rota vinculada'} • {parada.latitude}, {parada.longitude}</p>
                     </div>
                   </div>
                 ))}
@@ -563,12 +571,12 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {ocorrencias.length === 0 && <p className="text-sm text-gray-500">Nenhuma ocorrência registrada.</p>}
                 {ocorrencias.map((ocorrencia) => (
-                  <div key={ocorrencia.id} className="flex gap-3 border rounded-xl p-4">
+                  <div key={String(ocorrencia.id)} className="flex gap-3 border rounded-xl p-4">
                     {ocorrencia.status === 'resolved' ? <CheckCircle2 className="text-emerald-500" /> : ocorrencia.type === 'delay' ? <Clock className="text-amber-500" /> : <AlertTriangle className="text-red-500" />}
                     <div>
                       <p className="font-semibold">{traduzirOcorrencia(ocorrencia.type)}</p>
                       <p className="text-sm text-gray-500">{ocorrencia.description}</p>
-                      <p className="text-xs text-gray-400 mt-1">{rotasPorId.get(ocorrencia.route_id ?? 0)?.name ?? 'Sem rota vinculada'}</p>
+                      <p className="text-xs text-gray-400 mt-1">{ocorrencia.route_id ? rotasPorId.get(String(ocorrencia.route_id))?.name : 'Sem rota vinculada'}</p>
                     </div>
                   </div>
                 ))}
