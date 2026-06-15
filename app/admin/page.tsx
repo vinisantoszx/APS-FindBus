@@ -1,7 +1,20 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, BarChart3, BusFront, CheckCircle2, Clock, Map as MapIcon, Navigation, Settings, Star, UsersRound } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  BusFront,
+  CheckCircle2,
+  Clock,
+  Map as MapIcon,
+  Navigation,
+  RefreshCw,
+  Settings,
+  Star,
+  UsersRound,
+} from 'lucide-react';
 import Map from '@/components/Map';
 import { createClient } from '@/utils/supabase/client';
 
@@ -73,6 +86,11 @@ type StopForm = {
   routeId: string;
 };
 
+type SupabaseClientState = {
+  client: ReturnType<typeof createClient> | null;
+  error: string | null;
+};
+
 const initialVehicleForm: VehicleForm = {
   plate: '',
   model: '',
@@ -111,7 +129,25 @@ function traduzirOcorrencia(type: string) {
 function mediaNumerica(values: Array<number | null>) {
   const validos = values.filter((value): value is number => typeof value === 'number');
   if (validos.length === 0) return 0;
-  return Math.round(validos.reduce((sum, value) => sum + value, 0) / validos.length);
+
+  const media = Math.round(validos.reduce((sum, value) => sum + value, 0) / validos.length);
+  return Math.min(100, Math.max(0, media));
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'Erro desconhecido.';
+}
+
+function getSupabaseConnectionMessage(error: unknown) {
+  const message = getErrorMessage(error);
+
+  if (message.toLowerCase().includes('failed to fetch')) {
+    return 'Erro ao conectar ao Supabase. Verifique se o .env.local tem NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY corretos, se a URL começa com https://, se o projeto Supabase está ativo e se você reiniciou o npm run dev depois de editar o .env.local.';
+  }
+
+  return `Erro ao carregar painel: ${message}`;
 }
 
 export default function AdminDashboard() {
@@ -129,37 +165,55 @@ export default function AdminDashboard() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const supabase = useMemo(() => createClient(), []);
+  const [supabaseState] = useState<SupabaseClientState>(() => {
+    try {
+      return { client: createClient(), error: null };
+    } catch (error) {
+      return { client: null, error: getErrorMessage(error) };
+    }
+  });
+
+  const supabase = supabaseState.client;
 
   const carregarDados = useCallback(async () => {
     setCarregando(true);
     setErro(null);
 
-    const [vehiclesResponse, routesResponse, stopsResponse, tripsResponse, occurrencesResponse, ratingsResponse] = await Promise.all([
-      supabase.from('vehicles').select('id, plate, model, capacity, active').order('id', { ascending: true }),
-      supabase.from('routes').select('id, name, description, active').order('id', { ascending: true }),
-      supabase.from('stops').select('id, route_id, name, latitude, longitude, sequence_order').order('sequence_order', { ascending: true }),
-      supabase.from('trips').select('id, route_id, vehicle_id, status, eta_next_stop').order('id', { ascending: true }),
-      supabase.from('occurrences').select('id, route_id, type, description, status, created_at').order('created_at', { ascending: false }).limit(8),
-      supabase.from('service_ratings').select('rating, punctuality, comfort, communication'),
-    ]);
-
-    const primeiroErro = vehiclesResponse.error ?? routesResponse.error ?? stopsResponse.error ?? tripsResponse.error ?? occurrencesResponse.error ?? ratingsResponse.error;
-
-    if (primeiroErro) {
-      setErro(`Erro ao carregar painel: ${primeiroErro.message}`);
+    if (!supabase) {
+      setErro(supabaseState.error ?? 'Não foi possível inicializar o Supabase.');
       setCarregando(false);
       return;
     }
 
-    setVeiculos((vehiclesResponse.data ?? []) as VehicleRecord[]);
-    setRotas((routesResponse.data ?? []) as RouteRecord[]);
-    setParadas((stopsResponse.data ?? []) as StopRecord[]);
-    setViagens((tripsResponse.data ?? []) as TripRecord[]);
-    setOcorrencias((occurrencesResponse.data ?? []) as OccurrenceRecord[]);
-    setAvaliacoes((ratingsResponse.data ?? []) as RatingRecord[]);
-    setCarregando(false);
-  }, [supabase]);
+    try {
+      const [vehiclesResponse, routesResponse, stopsResponse, tripsResponse, occurrencesResponse, ratingsResponse] = await Promise.all([
+        supabase.from('vehicles').select('id, plate, model, capacity, active').order('id', { ascending: true }),
+        supabase.from('routes').select('id, name, description, active').order('id', { ascending: true }),
+        supabase.from('stops').select('id, route_id, name, latitude, longitude, sequence_order').order('sequence_order', { ascending: true }),
+        supabase.from('trips').select('id, route_id, vehicle_id, status, eta_next_stop').order('id', { ascending: true }),
+        supabase.from('occurrences').select('id, route_id, type, description, status, created_at').order('created_at', { ascending: false }).limit(8),
+        supabase.from('service_ratings').select('rating, punctuality, comfort, communication'),
+      ]);
+
+      const primeiroErro = vehiclesResponse.error ?? routesResponse.error ?? stopsResponse.error ?? tripsResponse.error ?? occurrencesResponse.error ?? ratingsResponse.error;
+
+      if (primeiroErro) {
+        setErro(`Erro ao carregar painel: ${primeiroErro.message}`);
+        return;
+      }
+
+      setVeiculos((vehiclesResponse.data ?? []) as VehicleRecord[]);
+      setRotas((routesResponse.data ?? []) as RouteRecord[]);
+      setParadas((stopsResponse.data ?? []) as StopRecord[]);
+      setViagens((tripsResponse.data ?? []) as TripRecord[]);
+      setOcorrencias((occurrencesResponse.data ?? []) as OccurrenceRecord[]);
+      setAvaliacoes((ratingsResponse.data ?? []) as RatingRecord[]);
+    } catch (error) {
+      setErro(getSupabaseConnectionMessage(error));
+    } finally {
+      setCarregando(false);
+    }
+  }, [supabase, supabaseState.error]);
 
   useEffect(() => {
     carregarDados();
@@ -167,19 +221,21 @@ export default function AdminDashboard() {
 
   const rotasPorId = useMemo(() => new Map(rotas.map((rota) => [rota.id, rota])), [rotas]);
 
-  const veiculosComViagem = useMemo(() =>
-    veiculos.map((veiculo) => {
-      const viagem = viagens.find((item) => item.vehicle_id === veiculo.id && ['in_transit', 'delayed', 'waiting'].includes(item.status));
-      const rota = viagem?.route_id ? rotasPorId.get(viagem.route_id) : null;
+  const veiculosComViagem = useMemo(
+    () =>
+      veiculos.map((veiculo) => {
+        const viagem = viagens.find((item) => item.vehicle_id === veiculo.id && ['in_transit', 'delayed', 'waiting'].includes(item.status));
+        const rota = viagem?.route_id ? rotasPorId.get(viagem.route_id) : null;
 
-      return {
-        ...veiculo,
-        viagem,
-        rotaNome: rota?.name ?? 'Sem rota vinculada',
-        statusOperacional: traduzirStatus(viagem?.status),
-      };
-    }),
-  [rotasPorId, veiculos, viagens]);
+        return {
+          ...veiculo,
+          viagem,
+          rotaNome: rota?.name ?? 'Sem rota vinculada',
+          statusOperacional: traduzirStatus(viagem?.status),
+        };
+      }),
+    [rotasPorId, veiculos, viagens],
+  );
 
   const avaliacaoMedia = avaliacoes.length > 0
     ? (avaliacoes.reduce((sum, avaliacao) => sum + avaliacao.rating, 0) / avaliacoes.length).toFixed(1)
@@ -193,68 +249,98 @@ export default function AdminDashboard() {
 
   const criarVeiculo = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSalvando(true);
 
-    const { error } = await supabase.from('vehicles').insert({
-      plate: vehicleForm.plate.trim().toUpperCase(),
-      model: vehicleForm.model.trim(),
-      capacity: Number(vehicleForm.capacity),
-      active: true,
-    });
-
-    if (error) {
-      alert(`Erro ao cadastrar veículo: ${error.message}`);
-      setSalvando(false);
+    if (!supabase) {
+      alert(supabaseState.error ?? 'Supabase não configurado.');
       return;
     }
 
-    setVehicleForm(initialVehicleForm);
-    await carregarDados();
-    setSalvando(false);
+    setSalvando(true);
+
+    try {
+      const { error } = await supabase.from('vehicles').insert({
+        plate: vehicleForm.plate.trim().toUpperCase(),
+        model: vehicleForm.model.trim(),
+        capacity: Number(vehicleForm.capacity),
+        active: true,
+      });
+
+      if (error) {
+        alert(`Erro ao cadastrar veículo: ${error.message}`);
+        return;
+      }
+
+      setVehicleForm(initialVehicleForm);
+      await carregarDados();
+    } catch (error) {
+      alert(getSupabaseConnectionMessage(error));
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const criarRota = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSalvando(true);
 
-    const { error } = await supabase.from('routes').insert({
-      name: routeForm.name.trim(),
-      description: routeForm.description.trim(),
-      active: true,
-    });
-
-    if (error) {
-      alert(`Erro ao cadastrar rota: ${error.message}`);
-      setSalvando(false);
+    if (!supabase) {
+      alert(supabaseState.error ?? 'Supabase não configurado.');
       return;
     }
 
-    setRouteForm(initialRouteForm);
-    await carregarDados();
-    setSalvando(false);
+    setSalvando(true);
+
+    try {
+      const { error } = await supabase.from('routes').insert({
+        name: routeForm.name.trim(),
+        description: routeForm.description.trim(),
+        active: true,
+      });
+
+      if (error) {
+        alert(`Erro ao cadastrar rota: ${error.message}`);
+        return;
+      }
+
+      setRouteForm(initialRouteForm);
+      await carregarDados();
+    } catch (error) {
+      alert(getSupabaseConnectionMessage(error));
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const criarParada = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSalvando(true);
 
-    const { error } = await supabase.from('stops').insert({
-      name: stopForm.name.trim(),
-      latitude: Number(stopForm.latitude),
-      longitude: Number(stopForm.longitude),
-      route_id: stopForm.routeId ? Number(stopForm.routeId) : null,
-      sequence_order: paradas.length + 1,
-    });
-
-    if (error) {
-      alert(`Erro ao cadastrar parada: ${error.message}`);
-      setSalvando(false);
+    if (!supabase) {
+      alert(supabaseState.error ?? 'Supabase não configurado.');
       return;
     }
 
-    setStopForm(initialStopForm);
-    await carregarDados();
-    setSalvando(false);
+    setSalvando(true);
+
+    try {
+      const { error } = await supabase.from('stops').insert({
+        name: stopForm.name.trim(),
+        latitude: Number(stopForm.latitude),
+        longitude: Number(stopForm.longitude),
+        route_id: stopForm.routeId ? Number(stopForm.routeId) : null,
+        sequence_order: paradas.length + 1,
+      });
+
+      if (error) {
+        alert(`Erro ao cadastrar parada: ${error.message}`);
+        return;
+      }
+
+      setStopForm(initialStopForm);
+      await carregarDados();
+    } catch (error) {
+      alert(getSupabaseConnectionMessage(error));
+    } finally {
+      setSalvando(false);
+    }
   };
 
   return (
@@ -296,7 +382,15 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {erro && <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
+        {erro && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p className="font-semibold">Não foi possível carregar os dados do painel.</p>
+            <p className="mt-1">{erro}</p>
+            <button onClick={carregarDados} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-red-100 px-3 py-2 font-semibold text-red-800 hover:bg-red-200">
+              <RefreshCw size={16} /> Tentar novamente
+            </button>
+          </div>
+        )}
         {carregando && <div className="mb-6 rounded-xl border bg-white p-4 text-sm text-gray-500">Carregando dados do painel...</div>}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -338,6 +432,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-4">
+              {veiculosComViagem.length === 0 && <p className="rounded-2xl border bg-white p-5 text-sm text-gray-500">Nenhum veículo encontrado.</p>}
               {veiculosComViagem.map((veiculo) => (
                 <div key={veiculo.id} className="bg-white rounded-2xl border p-5 shadow-sm">
                   <div className="flex justify-between gap-3 mb-3">
@@ -363,10 +458,10 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
             <form onSubmit={criarVeiculo} className="bg-white border rounded-2xl p-6 shadow-sm h-fit space-y-4">
               <h3 className="text-xl font-bold text-gray-900">Cadastrar veículo</h3>
-              <input value={vehicleForm.plate} onChange={(e) => setVehicleForm({ ...vehicleForm, plate: e.target.value })} placeholder="Placa" className="w-full border rounded-lg px-3 py-2" required />
-              <input value={vehicleForm.model} onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })} placeholder="Modelo" className="w-full border rounded-lg px-3 py-2" required />
-              <input value={vehicleForm.capacity} onChange={(e) => setVehicleForm({ ...vehicleForm, capacity: e.target.value })} type="number" min="1" placeholder="Capacidade" className="w-full border rounded-lg px-3 py-2" required />
-              <button disabled={salvando} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 disabled:opacity-60">Salvar veículo</button>
+              <input value={vehicleForm.plate} onChange={(event) => setVehicleForm({ ...vehicleForm, plate: event.target.value })} placeholder="Placa" className="w-full border rounded-lg px-3 py-2" required />
+              <input value={vehicleForm.model} onChange={(event) => setVehicleForm({ ...vehicleForm, model: event.target.value })} placeholder="Modelo" className="w-full border rounded-lg px-3 py-2" required />
+              <input value={vehicleForm.capacity} onChange={(event) => setVehicleForm({ ...vehicleForm, capacity: event.target.value })} type="number" min="1" placeholder="Capacidade" className="w-full border rounded-lg px-3 py-2" required />
+              <button disabled={salvando || !supabase} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 disabled:opacity-60">Salvar veículo</button>
             </form>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {veiculosComViagem.map((veiculo) => (
@@ -389,9 +484,9 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
             <form onSubmit={criarRota} className="bg-white border rounded-2xl p-6 shadow-sm h-fit space-y-4">
               <h3 className="text-xl font-bold text-gray-900">Cadastrar rota</h3>
-              <input value={routeForm.name} onChange={(e) => setRouteForm({ ...routeForm, name: e.target.value })} placeholder="Nome da rota" className="w-full border rounded-lg px-3 py-2" required />
-              <textarea value={routeForm.description} onChange={(e) => setRouteForm({ ...routeForm, description: e.target.value })} placeholder="Itinerário ou descrição" className="w-full border rounded-lg px-3 py-2 min-h-24" required />
-              <button disabled={salvando} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 disabled:opacity-60">Salvar rota</button>
+              <input value={routeForm.name} onChange={(event) => setRouteForm({ ...routeForm, name: event.target.value })} placeholder="Nome da rota" className="w-full border rounded-lg px-3 py-2" required />
+              <textarea value={routeForm.description} onChange={(event) => setRouteForm({ ...routeForm, description: event.target.value })} placeholder="Itinerário ou descrição" className="w-full border rounded-lg px-3 py-2 min-h-24" required />
+              <button disabled={salvando || !supabase} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 disabled:opacity-60">Salvar rota</button>
             </form>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {rotas.map((rota) => {
@@ -417,18 +512,19 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
             <form onSubmit={criarParada} className="bg-white border rounded-2xl p-6 shadow-sm h-fit space-y-4">
               <h3 className="text-xl font-bold text-gray-900">Cadastrar parada</h3>
-              <input value={stopForm.name} onChange={(e) => setStopForm({ ...stopForm, name: e.target.value })} placeholder="Nome da parada" className="w-full border rounded-lg px-3 py-2" required />
-              <select value={stopForm.routeId} onChange={(e) => setStopForm({ ...stopForm, routeId: e.target.value })} className="w-full border rounded-lg px-3 py-2">
+              <input value={stopForm.name} onChange={(event) => setStopForm({ ...stopForm, name: event.target.value })} placeholder="Nome da parada" className="w-full border rounded-lg px-3 py-2" required />
+              <select value={stopForm.routeId} onChange={(event) => setStopForm({ ...stopForm, routeId: event.target.value })} className="w-full border rounded-lg px-3 py-2">
                 <option value="">Sem rota vinculada</option>
                 {rotas.map((rota) => <option key={rota.id} value={rota.id}>{rota.name}</option>)}
               </select>
-              <input value={stopForm.latitude} onChange={(e) => setStopForm({ ...stopForm, latitude: e.target.value })} type="number" step="any" placeholder="Latitude" className="w-full border rounded-lg px-3 py-2" required />
-              <input value={stopForm.longitude} onChange={(e) => setStopForm({ ...stopForm, longitude: e.target.value })} type="number" step="any" placeholder="Longitude" className="w-full border rounded-lg px-3 py-2" required />
-              <button disabled={salvando} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 disabled:opacity-60">Salvar parada</button>
+              <input value={stopForm.latitude} onChange={(event) => setStopForm({ ...stopForm, latitude: event.target.value })} type="number" step="any" placeholder="Latitude" className="w-full border rounded-lg px-3 py-2" required />
+              <input value={stopForm.longitude} onChange={(event) => setStopForm({ ...stopForm, longitude: event.target.value })} type="number" step="any" placeholder="Longitude" className="w-full border rounded-lg px-3 py-2" required />
+              <button disabled={salvando || !supabase} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 disabled:opacity-60">Salvar parada</button>
             </form>
             <div className="bg-white border rounded-2xl shadow-sm p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Pontos de parada cadastrados</h3>
               <div className="space-y-3">
+                {paradas.length === 0 && <p className="text-sm text-gray-500">Nenhum ponto de parada encontrado.</p>}
                 {paradas.map((parada, index) => (
                   <div key={parada.id} className="flex items-center gap-4 border rounded-xl p-4">
                     <div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">{index + 1}</div>
