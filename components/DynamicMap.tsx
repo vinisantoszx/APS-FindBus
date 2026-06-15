@@ -2,7 +2,7 @@
 
 import 'leaflet/dist/leaflet.css';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 import { createClient } from '@/utils/supabase/client';
@@ -36,47 +36,83 @@ function isTrip(value: unknown): value is Trip {
   );
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'Erro desconhecido.';
+}
+
 export default function DynamicMap() {
   const [trips, setTrips] = useState<Trip[]>([]);
-  const supabase = useMemo(() => createClient(), []);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTrips = async () => {
-      const { data, error } = await supabase
-        .from('trips')
-        .select('*, routes(name)')
-        .in('status', ['in_transit', 'delayed']);
+    let mounted = true;
 
-      if (error) {
-        console.error('Erro ao buscar viagens:', error.message);
-        return;
+    const startRealtime = async () => {
+      try {
+        const supabase = createClient();
+
+        const { data, error } = await supabase
+          .from('trips')
+          .select('*, routes(name)')
+          .in('status', ['in_transit', 'delayed']);
+
+        if (!mounted) return undefined;
+
+        if (error) {
+          setErro(`Erro ao buscar viagens: ${error.message}`);
+          return undefined;
+        }
+
+        setTrips((data ?? []) as Trip[]);
+        setErro(null);
+
+        const channel = supabase
+          .channel('realtime_trips')
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, (payload) => {
+            if (!isTrip(payload.new)) return;
+
+            setTrips((currentTrips) =>
+              currentTrips.map((trip) =>
+                trip.id === payload.new.id ? { ...trip, ...payload.new } : trip,
+              ),
+            );
+          })
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(channel);
+        };
+      } catch (error) {
+        if (mounted) {
+          setErro(`Mapa sem conexão com o Supabase: ${getErrorMessage(error)}`);
+        }
+
+        return undefined;
       }
-
-      setTrips((data ?? []) as Trip[]);
     };
 
-    fetchTrips();
+    let cleanup: (() => void) | undefined;
 
-    const channel = supabase
-      .channel('realtime_trips')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, (payload) => {
-        if (!isTrip(payload.new)) return;
-
-        setTrips((currentTrips) =>
-          currentTrips.map((trip) =>
-            trip.id === payload.new.id ? { ...trip, ...payload.new } : trip,
-          ),
-        );
-      })
-      .subscribe();
+    startRealtime().then((unsubscribe) => {
+      cleanup = unsubscribe;
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      mounted = false;
+      cleanup?.();
     };
-  }, [supabase]);
+  }, []);
 
   return (
     <div className="h-full w-full relative z-0">
+      {erro && (
+        <div className="absolute left-3 right-3 top-3 z-[500] rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shadow-sm">
+          {erro}
+        </div>
+      )}
+
       <MapContainer
         center={position}
         zoom={14}
