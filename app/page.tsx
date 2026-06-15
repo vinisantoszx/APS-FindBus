@@ -1,25 +1,25 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Bell, BusFront, Clock, MapPin, Search } from 'lucide-react';
 import Map from '@/components/Map';
 import { createClient } from '@/utils/supabase/client';
-import { MapPin, Clock, BusFront, Search, AlertTriangle, Bell } from 'lucide-react';
+
+type Trip = {
+  status: string;
+  eta_next_stop?: string | null;
+};
+
+type Route = {
+  id: number;
+  name: string;
+  description?: string | null;
+  trips?: Trip[] | null;
+};
 
 export default function Home() {
-  const supabase = createClient();
-  interface Trip {
-    status: string;
-    eta_next_stop?: string;
-  }
-
-  interface Route {
-    id: number;
-    name: string;
-    description?: string;
-    trips?: Trip[];
-  }
-
+  const supabase = useMemo(() => createClient(), []);
   const [rotas, setRotas] = useState<Route[]>([]);
-
   const [busca, setBusca] = useState('');
 
   useEffect(() => {
@@ -27,34 +27,45 @@ export default function Home() {
       const { data, error } = await supabase
         .from('routes')
         .select(`
-        id,
-        name,
-        description,
-        trips(status, eta_next_stop)
-      `);
+          id,
+          name,
+          description,
+          trips(status, eta_next_stop)
+        `);
 
       if (error) {
-        console.error(error);
+        console.error('Erro ao buscar rotas:', error.message);
         return;
       }
 
-      setRotas(data ?? []);
+      setRotas((data ?? []) as Route[]);
     };
 
     fetchRotas();
   }, [supabase]);
 
   const handleReportar = async () => {
-    const desc = prompt("Descreva a ocorrência (Ex: Atraso, Quebra):");
-    if (desc) {
-      await supabase.from('occurrences').insert({ type: 'other', description: desc });
-      alert("Ocorrência registrada!");
+    const desc = prompt('Descreva a ocorrência (Ex: Atraso, Quebra):');
+    const description = desc?.trim();
+
+    if (!description) return;
+
+    const { error } = await supabase.from('occurrences').insert({
+      type: 'other',
+      description,
+    });
+
+    if (error) {
+      alert('Não foi possível registrar a ocorrência. Tente novamente.');
+      console.error('Erro ao registrar ocorrência:', error.message);
+      return;
     }
+
+    alert('Ocorrência registrada!');
   };
 
-  // RF20 - Busca de rotas
-  const rotasFiltradas = rotas.filter((r) =>
-    (r.name ?? '').toLowerCase().includes(busca.toLowerCase())
+  const rotasFiltradas = rotas.filter((rota) =>
+    rota.name.toLowerCase().includes(busca.toLowerCase()),
   );
 
   return (
@@ -89,17 +100,30 @@ export default function Home() {
             const isDelayed = viagemAtiva?.status === 'delayed';
 
             return (
-              <div key={rota.id} className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${isDelayed ? 'border-red-200' : 'hover:border-emerald-500'}`}>
+              <div
+                key={rota.id}
+                className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${
+                  isDelayed ? 'border-red-200' : 'hover:border-emerald-500'
+                }`}
+              >
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-gray-800 text-sm">{rota.name}</h3>
-                  <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${isDelayed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                    {isDelayed ? 'Atrasado' : (viagemAtiva ? 'Em trânsito' : 'Aguardando')}
+                  <span
+                    className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${
+                      isDelayed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                    }`}
+                  >
+                    {isDelayed ? 'Atrasado' : viagemAtiva ? 'Em trânsito' : 'Aguardando'}
                   </span>
                 </div>
                 {viagemAtiva && (
                   <>
                     <div className="flex items-center text-sm text-gray-600 mb-1 gap-2">
-                      {isDelayed ? <AlertTriangle size={14} className="text-red-500" /> : <Clock size={14} className="text-emerald-600" />}
+                      {isDelayed ? (
+                        <AlertTriangle size={14} className="text-red-500" />
+                      ) : (
+                        <Clock size={14} className="text-emerald-600" />
+                      )}
                       {viagemAtiva.eta_next_stop || 'Calculando...'}
                     </div>
                     <div className="flex items-center text-sm text-gray-600 gap-2">
@@ -113,7 +137,10 @@ export default function Home() {
         </div>
 
         <div className="p-4 border-t bg-gray-50">
-          <button onClick={handleReportar} className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm">
+          <button
+            onClick={handleReportar}
+            className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm"
+          >
             Reportar Ocorrência
           </button>
         </div>
