@@ -6,6 +6,7 @@ import Map from '@/components/Map';
 import { createClient } from '@/utils/supabase/client';
 
 type StatusRota = 'Em trânsito' | 'Atrasado' | 'Aguardando';
+type RecordId = string | number;
 
 type TripRecord = {
   status: string | null;
@@ -13,7 +14,7 @@ type TripRecord = {
 };
 
 type RouteRecord = {
-  id: number;
+  id: RecordId;
   name: string;
   description: string | null;
   active: boolean | null;
@@ -21,7 +22,7 @@ type RouteRecord = {
 };
 
 type Rota = {
-  id: number;
+  id: RecordId;
   nome: string;
   descricao: string;
   status: StatusRota;
@@ -57,7 +58,7 @@ function formatEta(status: StatusRota, eta?: string | null) {
   return 'Saída aguardando confirmação';
 }
 
-function buildRotas(routes: RouteRecord[], favoriteIds: Set<number>): Rota[] {
+function buildRotas(routes: RouteRecord[], favoriteIds: Set<string>): Rota[] {
   return routes.map((rota) => {
     const viagemAtual = rota.trips?.[0];
     const status = formatStatus(viagemAtual?.status);
@@ -69,7 +70,7 @@ function buildRotas(routes: RouteRecord[], favoriteIds: Set<number>): Rota[] {
       status,
       eta: formatEta(status, viagemAtual?.eta_next_stop),
       parada: status === 'Aguardando' ? 'Aguardando início da rota' : 'Próxima parada em atualização',
-      favorita: favoriteIds.has(rota.id),
+      favorita: favoriteIds.has(String(rota.id)),
     };
   });
 }
@@ -124,7 +125,7 @@ export default function Home() {
         return;
       }
 
-      let favoriteIds = new Set<number>();
+      let favoriteIds = new Set<string>();
 
       if (user) {
         const { data: favoritesData, error: favoritesError } = await supabase
@@ -133,7 +134,7 @@ export default function Home() {
           .eq('user_id', user.id);
 
         if (!favoritesError) {
-          favoriteIds = new Set((favoritesData ?? []).map((favorite) => Number(favorite.route_id)));
+          favoriteIds = new Set((favoritesData ?? []).map((favorite) => String(favorite.route_id)));
         }
       }
 
@@ -180,7 +181,7 @@ export default function Home() {
 
     setRotas((rotasAtuais) =>
       rotasAtuais.map((item) =>
-        item.id === rota.id ? { ...item, favorita: !item.favorita } : item,
+        String(item.id) === String(rota.id) ? { ...item, favorita: !item.favorita } : item,
       ),
     );
   };
@@ -219,33 +220,22 @@ export default function Home() {
           <Bell size={20} className="cursor-pointer hover:text-emerald-200" />
         </div>
 
-        <section className="p-4 border-b bg-emerald-50">
-          <div className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-11 w-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                <UserRound size={22} />
+        <div className="p-4 border-b bg-emerald-50">
+          <div className="bg-white rounded-2xl border border-emerald-100 p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <UserRound size={20} />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">Conta do estudante</p>
-                <h2 className="text-base font-bold text-gray-800">{perfil.nome}</h2>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <GraduationCap size={16} className="text-emerald-600" />
-                {perfil.instituicao}
-              </div>
-              <div className="flex items-center gap-2">
-                <BookOpen size={16} className="text-emerald-600" />
-                {perfil.curso}
-              </div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck size={16} className="text-emerald-600" />
-                {perfil.status}
+                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Conta do estudante</p>
+                <h2 className="font-bold text-gray-900">{perfil.nome}</h2>
+                <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><GraduationCap size={13} /> {perfil.instituicao}</p>
+                <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><BookOpen size={13} /> {perfil.curso}</p>
+                <p className="text-xs text-emerald-700 flex items-center gap-1 mt-2"><ShieldCheck size={13} /> {perfil.status}</p>
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
         <div className="p-4 border-b">
           <div className="relative">
@@ -254,31 +244,24 @@ export default function Home() {
               type="text"
               placeholder="Buscar rota..."
               value={busca}
-              onChange={(e) => setBusca(e.target.value)}
+              onChange={(event) => setBusca(event.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
+          {erro && <p className="text-sm bg-red-50 text-red-700 border border-red-100 p-3 rounded-lg">{erro}</p>}
+          {carregando && <p className="text-sm text-gray-500">Carregando rotas do Supabase...</p>}
 
           <section>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Favoritas</h2>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas favoritas</h2>
             <div className="space-y-3">
-              {carregando && <p className="text-sm text-gray-500">Carregando favoritos...</p>}
-              {!carregando && rotasFavoritas.length === 0 && (
-                <p className="text-sm text-gray-500">Nenhuma rota favorita salva ainda.</p>
-              )}
+              {rotasFavoritas.length === 0 && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3">Nenhuma rota favoritada ainda.</p>}
               {rotasFavoritas.map((rota) => (
-                <div key={rota.id} className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-                  <div className="flex items-start gap-2">
-                    <Heart size={16} className="text-emerald-600 fill-emerald-600 mt-0.5" />
-                    <div>
-                      <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
-                      <p className="text-xs text-gray-500">{rota.descricao}</p>
-                    </div>
-                  </div>
+                <div key={`fav-${String(rota.id)}`} className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                  <p className="font-semibold text-gray-900 text-sm">{rota.nome}</p>
+                  <p className="text-xs text-gray-500">{rota.eta}</p>
                 </div>
               ))}
             </div>
@@ -287,51 +270,25 @@ export default function Home() {
           <section>
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Ativas</h2>
             <div className="space-y-4">
-              {carregando && <p className="text-sm text-gray-500">Carregando rotas ativas...</p>}
-              {!carregando && rotasFiltradas.length === 0 && (
-                <p className="text-sm text-gray-500">Nenhuma rota encontrada.</p>
-              )}
               {rotasFiltradas.map((rota) => {
                 const isDelayed = rota.status === 'Atrasado';
 
                 return (
-                  <div
-                    key={rota.id}
-                    className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${
-                      isDelayed ? 'border-red-200' : 'hover:border-emerald-500'
-                    }`}
-                  >
+                  <div key={String(rota.id)} className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${isDelayed ? 'border-red-200' : 'hover:border-emerald-500'}`}>
                     <div className="flex justify-between items-start mb-2 gap-3">
                       <div>
                         <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
-                        <p className="text-xs text-gray-500">{rota.descricao}</p>
+                        <p className="text-xs text-gray-500 mt-1">{rota.descricao}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => alternarFavorito(rota)}
-                        className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                          rota.favorita ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
-                        }`}
-                        aria-label={rota.favorita ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-                      >
-                        <Heart size={16} className={rota.favorita ? 'fill-emerald-600' : ''} />
+                      <button onClick={() => alternarFavorito(rota)} className={`shrink-0 rounded-full p-2 ${rota.favorita ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-400 hover:text-red-500'}`} aria-label="Favoritar rota">
+                        <Heart size={16} fill={rota.favorita ? 'currentColor' : 'none'} />
                       </button>
                     </div>
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <span
-                        className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider whitespace-nowrap ${
-                          isDelayed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                        }`}
-                      >
-                        {rota.status}
-                      </span>
-                    </div>
+                    <span className={`inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider mb-3 ${isDelayed ? 'bg-red-100 text-red-800' : rota.status === 'Em trânsito' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                      {rota.status}
+                    </span>
                     <div className="flex items-center text-sm text-gray-600 mb-1 gap-2">
-                      {isDelayed ? (
-                        <AlertTriangle size={14} className="text-red-500" />
-                      ) : (
-                        <Clock size={14} className="text-emerald-600" />
-                      )}
+                      {isDelayed ? <AlertTriangle size={14} className="text-red-500" /> : <Clock size={14} className="text-emerald-600" />}
                       {rota.eta}
                     </div>
                     <div className="flex items-center text-sm text-gray-600 gap-2">
@@ -345,10 +302,7 @@ export default function Home() {
         </div>
 
         <div className="p-4 border-t bg-gray-50">
-          <button
-            onClick={handleReportar}
-            className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm"
-          >
+          <button onClick={handleReportar} className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm">
             Reportar Ocorrência
           </button>
         </div>
