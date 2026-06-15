@@ -1,59 +1,208 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, BookOpen, BusFront, Clock, GraduationCap, Heart, MapPin, Search, ShieldCheck, UserRound } from 'lucide-react';
 import Map from '@/components/Map';
+import { createClient } from '@/utils/supabase/client';
 
-type RotaFixa = {
+type StatusRota = 'Em trânsito' | 'Atrasado' | 'Aguardando';
+
+type TripRecord = {
+  status: string | null;
+  eta_next_stop: string | null;
+};
+
+type RouteRecord = {
+  id: number;
+  name: string;
+  description: string | null;
+  active: boolean | null;
+  trips: TripRecord[] | null;
+};
+
+type Rota = {
   id: number;
   nome: string;
   descricao: string;
-  status: 'Em trânsito' | 'Atrasado' | 'Aguardando';
+  status: StatusRota;
   eta: string;
   parada: string;
-  favorita?: boolean;
+  favorita: boolean;
 };
 
-const rotasAtivas: RotaFixa[] = [
-  {
-    id: 1,
-    nome: 'Rota UFC Campus Quixadá',
-    descricao: 'Rodoviária • Centro • UFC',
-    status: 'Em trânsito',
-    eta: 'Chegada estimada em 8 min',
-    parada: 'Próxima parada: Rodoviária de Quixadá',
-    favorita: true,
-  },
-  {
-    id: 2,
-    nome: 'Rota Universitária Centro',
-    descricao: 'Centro • IFCE • Unicatólica • UFC',
-    status: 'Atrasado',
-    eta: 'Atraso aproximado de 12 min',
-    parada: 'Próxima parada: Praça José de Barros',
-    favorita: true,
-  },
-  {
-    id: 3,
-    nome: 'Rota Noturna Universitária',
-    descricao: 'UFC • Terminal • Bairros',
-    status: 'Aguardando',
-    eta: 'Saída prevista às 18:20',
-    parada: 'Ponto inicial: Campus UFC',
-  },
-];
+type PerfilEstudante = {
+  nome: string;
+  instituicao: string;
+  curso: string;
+  status: string;
+};
+
+const perfilPadrao: PerfilEstudante = {
+  nome: 'Estudante FindBus',
+  instituicao: 'Universidade Federal do Ceará - Campus Quixadá',
+  curso: 'Análise e Projeto de Sistemas',
+  status: 'Perfil estudantil para rotas universitárias',
+};
+
+function formatStatus(status?: string | null): StatusRota {
+  if (status === 'delayed') return 'Atrasado';
+  if (status === 'in_transit') return 'Em trânsito';
+  return 'Aguardando';
+}
+
+function formatEta(status: StatusRota, eta?: string | null) {
+  if (eta) return eta;
+  if (status === 'Atrasado') return 'Atraso em verificação';
+  if (status === 'Em trânsito') return 'Chegada em atualização';
+  return 'Saída aguardando confirmação';
+}
+
+function buildRotas(routes: RouteRecord[], favoriteIds: Set<number>): Rota[] {
+  return routes.map((rota) => {
+    const viagemAtual = rota.trips?.[0];
+    const status = formatStatus(viagemAtual?.status);
+
+    return {
+      id: rota.id,
+      nome: rota.name,
+      descricao: rota.description ?? 'Itinerário ainda não informado',
+      status,
+      eta: formatEta(status, viagemAtual?.eta_next_stop),
+      parada: status === 'Aguardando' ? 'Aguardando início da rota' : 'Próxima parada em atualização',
+      favorita: favoriteIds.has(rota.id),
+    };
+  });
+}
 
 export default function Home() {
   const [busca, setBusca] = useState('');
+  const [rotas, setRotas] = useState<Rota[]>([]);
+  const [perfil, setPerfil] = useState<PerfilEstudante>(perfilPadrao);
+  const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const rotasFiltradas = rotasAtivas.filter((rota) =>
+  const supabase = useMemo(() => createClient(), []);
+
+  useEffect(() => {
+    const carregarDados = async () => {
+      setCarregando(true);
+      setErro(null);
+
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+      setUsuarioId(user?.id ?? null);
+
+      if (user) {
+        const metadata = user.user_metadata as { full_name?: string; name?: string };
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, institution, course')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        setPerfil({
+          nome: profile?.full_name ?? metadata.full_name ?? metadata.name ?? user.email ?? perfilPadrao.nome,
+          instituicao: profile?.institution ?? perfilPadrao.instituicao,
+          curso: profile?.course ?? perfilPadrao.curso,
+          status: 'Perfil estudantil verificado para rotas universitárias',
+        });
+      } else {
+        setPerfil(perfilPadrao);
+      }
+
+      const { data: routesData, error: routesError } = await supabase
+        .from('routes')
+        .select('id, name, description, active, trips(status, eta_next_stop)')
+        .eq('active', true)
+        .order('id', { ascending: true });
+
+      if (routesError) {
+        setErro(`Não foi possível carregar as rotas: ${routesError.message}`);
+        setRotas([]);
+        setCarregando(false);
+        return;
+      }
+
+      let favoriteIds = new Set<number>();
+
+      if (user) {
+        const { data: favoritesData, error: favoritesError } = await supabase
+          .from('route_favorites')
+          .select('route_id')
+          .eq('user_id', user.id);
+
+        if (!favoritesError) {
+          favoriteIds = new Set((favoritesData ?? []).map((favorite) => Number(favorite.route_id)));
+        }
+      }
+
+      setRotas(buildRotas((routesData ?? []) as RouteRecord[], favoriteIds));
+      setCarregando(false);
+    };
+
+    carregarDados();
+  }, [supabase]);
+
+  const rotasFiltradas = rotas.filter((rota) =>
     rota.nome.toLowerCase().includes(busca.toLowerCase()),
   );
 
-  const rotasFavoritas = rotasAtivas.filter((rota) => rota.favorita);
+  const rotasFavoritas = rotas.filter((rota) => rota.favorita);
 
-  const handleReportar = () => {
-    alert('Protótipo visual: aqui o estudante registraria atraso, superlotação, falha mecânica ou problema de segurança.');
+  const alternarFavorito = async (rota: Rota) => {
+    if (!usuarioId) {
+      alert('Faça login para salvar rotas favoritas no banco de dados.');
+      return;
+    }
+
+    if (rota.favorita) {
+      const { error } = await supabase
+        .from('route_favorites')
+        .delete()
+        .eq('user_id', usuarioId)
+        .eq('route_id', rota.id);
+
+      if (error) {
+        alert(`Erro ao remover favorito: ${error.message}`);
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from('route_favorites')
+        .insert({ user_id: usuarioId, route_id: rota.id });
+
+      if (error) {
+        alert(`Erro ao salvar favorito: ${error.message}`);
+        return;
+      }
+    }
+
+    setRotas((rotasAtuais) =>
+      rotasAtuais.map((item) =>
+        item.id === rota.id ? { ...item, favorita: !item.favorita } : item,
+      ),
+    );
+  };
+
+  const handleReportar = async () => {
+    const descricao = prompt('Descreva a ocorrência: atraso, superlotação, falha mecânica ou problema de segurança.');
+
+    if (!descricao?.trim()) return;
+
+    const { error } = await supabase.from('occurrences').insert({
+      user_id: usuarioId,
+      type: 'other',
+      description: descricao.trim(),
+      status: 'open',
+    });
+
+    if (error) {
+      alert(`Erro ao registrar ocorrência: ${error.message}`);
+      return;
+    }
+
+    alert('Ocorrência registrada com sucesso.');
   };
 
   return (
@@ -78,21 +227,21 @@ export default function Home() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">Conta do estudante</p>
-                <h2 className="text-base font-bold text-gray-800">Antônio Vinícius Silva Santos</h2>
+                <h2 className="text-base font-bold text-gray-800">{perfil.nome}</h2>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <GraduationCap size={16} className="text-emerald-600" />
-                Universidade Federal do Ceará - Campus Quixadá
+                {perfil.instituicao}
               </div>
               <div className="flex items-center gap-2">
                 <BookOpen size={16} className="text-emerald-600" />
-                Análise e Projeto de Sistemas
+                {perfil.curso}
               </div>
               <div className="flex items-center gap-2">
                 <ShieldCheck size={16} className="text-emerald-600" />
-                Perfil estudantil verificado para rotas universitárias
+                {perfil.status}
               </div>
             </div>
           </div>
@@ -112,9 +261,15 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
+
           <section>
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Favoritas</h2>
             <div className="space-y-3">
+              {carregando && <p className="text-sm text-gray-500">Carregando favoritos...</p>}
+              {!carregando && rotasFavoritas.length === 0 && (
+                <p className="text-sm text-gray-500">Nenhuma rota favorita salva ainda.</p>
+              )}
               {rotasFavoritas.map((rota) => (
                 <div key={rota.id} className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
                   <div className="flex items-start gap-2">
@@ -132,6 +287,10 @@ export default function Home() {
           <section>
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Ativas</h2>
             <div className="space-y-4">
+              {carregando && <p className="text-sm text-gray-500">Carregando rotas ativas...</p>}
+              {!carregando && rotasFiltradas.length === 0 && (
+                <p className="text-sm text-gray-500">Nenhuma rota encontrada.</p>
+              )}
               {rotasFiltradas.map((rota) => {
                 const isDelayed = rota.status === 'Atrasado';
 
@@ -147,6 +306,18 @@ export default function Home() {
                         <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
                         <p className="text-xs text-gray-500">{rota.descricao}</p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => alternarFavorito(rota)}
+                        className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                          rota.favorita ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                        }`}
+                        aria-label={rota.favorita ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                      >
+                        <Heart size={16} className={rota.favorita ? 'fill-emerald-600' : ''} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 mb-2">
                       <span
                         className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider whitespace-nowrap ${
                           isDelayed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
