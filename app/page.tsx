@@ -125,58 +125,69 @@ export default function Home() {
       setCarregando(true);
       setErro(null);
 
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData.user;
-      setUsuarioId(user?.id ?? null);
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const user = userData.user;
+        setUsuarioId(user?.id ?? null);
 
-      if (user) {
-        const metadata = user.user_metadata as { full_name?: string; name?: string };
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, institution, course')
-          .eq('id', user.id)
-          .maybeSingle();
+        if (user) {
+          const metadata = user.user_metadata as { full_name?: string; name?: string };
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, institution, course')
+            .eq('id', user.id)
+            .maybeSingle();
 
-        setPerfil({
-          nome: profile?.full_name ?? metadata.full_name ?? metadata.name ?? user.email ?? perfilPadrao.nome,
-          instituicao: profile?.institution ?? perfilPadrao.instituicao,
-          curso: profile?.course ?? perfilPadrao.curso,
-          status: 'Perfil estudantil verificado para rotas universitárias',
-        });
-      } else {
-        setPerfil(perfilPadrao);
-      }
-
-      const { data: routesData, error: routesError } = await supabase
-        .from('routes')
-        .select('id, name, description, active, trips(status, eta_next_stop)')
-        .eq('active', true)
-        .order('id', { ascending: true });
-
-      if (routesError) {
-        setErro(`Não foi possível carregar as rotas: ${routesError.message}`);
-        setRotas([]);
-        setCarregando(false);
-        return;
-      }
-
-      let favoriteIds = new Set<string>();
-
-      if (user) {
-        const { data: favoritesData, error: favoritesError } = await supabase
-          .from('route_favorites')
-          .select('route_id')
-          .eq('user_id', user.id);
-
-        if (favoritesError) {
-          setErro(`As rotas carregaram, mas os favoritos não puderam ser lidos: ${favoritesError.message}`);
+          setPerfil({
+            nome: profile?.full_name ?? metadata.full_name ?? metadata.name ?? user.email ?? perfilPadrao.nome,
+            instituicao: profile?.institution ?? perfilPadrao.instituicao,
+            curso: profile?.course ?? perfilPadrao.curso,
+            status: 'Perfil estudantil verificado para rotas universitárias',
+          });
         } else {
-          favoriteIds = new Set((favoritesData ?? []).map((favorite) => String(favorite.route_id)));
+          setPerfil(perfilPadrao);
         }
-      }
 
-      setRotas(buildRotas((routesData ?? []) as RouteRecord[], favoriteIds));
-      setCarregando(false);
+        const { data: routesData, error: routesError } = await supabase
+          .from('routes')
+          .select('id, name, description, active, trips(status, eta_next_stop)')
+          .eq('active', true)
+          .order('id', { ascending: true });
+
+        if (routesError) {
+          setErro(`Não foi possível carregar as rotas: ${routesError.message}`);
+          setRotas([]);
+          return;
+        }
+
+        let favoriteIds = new Set<string>();
+
+        if (user) {
+          const { data: favoritesData, error: favoritesError } = await supabase
+            .from('route_favorites')
+            .select('route_id')
+            .eq('user_id', user.id);
+
+          if (favoritesError) {
+            setErro(`As rotas carregaram, mas os favoritos não puderam ser lidos: ${favoritesError.message}`);
+          } else {
+            favoriteIds = new Set((favoritesData ?? []).map((favorite) => String(favorite.route_id)));
+          }
+        }
+
+        const rotasFormatadas = buildRotas((routesData ?? []) as RouteRecord[], favoriteIds);
+        setRotas(rotasFormatadas);
+
+        setAvaliacaoForm((formAtual) => ({
+          ...formAtual,
+          routeId: formAtual.routeId || String(rotasFormatadas[0]?.id ?? ''),
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro desconhecido.';
+        setErro(`Não foi possível carregar a página do estudante: ${message}`);
+      } finally {
+        setCarregando(false);
+      }
     };
 
     carregarDados();
@@ -187,7 +198,6 @@ export default function Home() {
   );
 
   const rotasFavoritas = rotas.filter((rota) => rota.favorita);
-
   const rotaSelecionadaParaAvaliacao = rotas.find((rota) => String(rota.id) === avaliacaoForm.routeId);
 
   const alternarFavorito = async (rota: Rota) => {
@@ -286,9 +296,9 @@ export default function Home() {
   };
 
   return (
-    <main className="flex h-screen w-full bg-gray-50 overflow-hidden flex-col md:flex-row font-sans">
-      <aside className="w-full md:w-[380px] bg-white shadow-xl flex flex-col z-20">
-        <div className="p-6 bg-emerald-600 md:bg-emerald-700 flex items-center justify-between text-white transition-colors">
+    <main className="flex min-h-screen w-full flex-col bg-gray-50 font-sans md:h-screen md:flex-row md:overflow-hidden">
+      <aside className="z-20 flex w-full flex-col bg-white shadow-xl md:h-full md:w-[390px]">
+        <div className="flex items-center justify-between bg-emerald-600 p-5 text-white transition-colors md:bg-emerald-700 md:p-6">
           <div className="flex items-center gap-3">
             <BusFront size={28} />
             <div>
@@ -299,24 +309,24 @@ export default function Home() {
           <Bell size={20} className="cursor-pointer hover:text-emerald-200" />
         </div>
 
-        <div className="p-4 border-b bg-emerald-50">
-          <div className="bg-white rounded-2xl border border-emerald-100 p-4 shadow-sm">
+        <div className="border-b bg-emerald-50 p-4">
+          <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
             <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                 <UserRound size={20} />
               </div>
-              <div>
-                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Conta do estudante</p>
-                <h2 className="font-bold text-gray-900">{perfil.nome}</h2>
-                <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><GraduationCap size={13} /> {perfil.instituicao}</p>
-                <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><BookOpen size={13} /> {perfil.curso}</p>
-                <p className="text-xs text-emerald-700 flex items-center gap-1 mt-2"><ShieldCheck size={13} /> {perfil.status}</p>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Conta do estudante</p>
+                <h2 className="break-words font-bold text-gray-900">{perfil.nome}</h2>
+                <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><GraduationCap size={13} /> {perfil.instituicao}</p>
+                <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><BookOpen size={13} /> {perfil.curso}</p>
+                <p className="mt-2 flex items-center gap-1 text-xs text-emerald-700"><ShieldCheck size={13} /> {perfil.status}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-4 border-b">
+        <div className="border-b p-4">
           <div className="relative">
             <Search className="absolute left-3 top-3 text-gray-400" size={18} />
             <input
@@ -324,22 +334,22 @@ export default function Home() {
               placeholder="Buscar rota..."
               value={busca}
               onChange={(event) => setBusca(event.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              className="w-full rounded-md bg-gray-100 py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {erro && <p className="text-sm bg-red-50 text-red-700 border border-red-100 p-3 rounded-lg">{erro}</p>}
+        <div className="space-y-5 p-4 md:flex-1 md:overflow-y-auto">
+          {erro && <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
           {carregando && <p className="text-sm text-gray-500">Carregando rotas do Supabase...</p>}
 
           <section>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas favoritas</h2>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Rotas favoritas</h2>
             <div className="space-y-3">
-              {rotasFavoritas.length === 0 && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3">Nenhuma rota favoritada ainda.</p>}
+              {rotasFavoritas.length === 0 && <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma rota favoritada ainda.</p>}
               {rotasFavoritas.map((rota) => (
                 <div key={`fav-${String(rota.id)}`} className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                  <p className="font-semibold text-gray-900 text-sm">{rota.nome}</p>
+                  <p className="break-words text-sm font-semibold text-gray-900">{rota.nome}</p>
                   <p className="text-xs text-gray-500">{rota.eta}</p>
                 </div>
               ))}
@@ -347,12 +357,12 @@ export default function Home() {
           </section>
 
           <section>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Avaliar rota</h2>
-            <form onSubmit={enviarAvaliacao} className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Avaliar rota</h2>
+            <form onSubmit={enviarAvaliacao} className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
               <select
                 value={avaliacaoForm.routeId}
                 onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, routeId: event.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full rounded-lg border px-3 py-2 text-sm"
                 required
               >
                 <option value="">Selecione uma rota</option>
@@ -362,7 +372,7 @@ export default function Home() {
               </select>
 
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Nota geral</p>
+                <p className="mb-2 text-xs font-semibold text-gray-500">Nota geral</p>
                 <div className="flex gap-1">
                   {Array.from({ length: 5 }).map((_, index) => {
                     const nota = index + 1;
@@ -385,15 +395,15 @@ export default function Home() {
 
               <div className="space-y-2 text-xs text-gray-600">
                 <label className="block">
-                  <span className="flex justify-between mb-1"><strong>Pontualidade</strong><span>{avaliacaoForm.punctuality}%</span></span>
+                  <span className="mb-1 flex justify-between"><strong>Pontualidade</strong><span>{avaliacaoForm.punctuality}%</span></span>
                   <input type="range" min="0" max="100" value={avaliacaoForm.punctuality} onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, punctuality: event.target.value })} className="w-full" />
                 </label>
                 <label className="block">
-                  <span className="flex justify-between mb-1"><strong>Conforto</strong><span>{avaliacaoForm.comfort}%</span></span>
+                  <span className="mb-1 flex justify-between"><strong>Conforto</strong><span>{avaliacaoForm.comfort}%</span></span>
                   <input type="range" min="0" max="100" value={avaliacaoForm.comfort} onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, comfort: event.target.value })} className="w-full" />
                 </label>
                 <label className="block">
-                  <span className="flex justify-between mb-1"><strong>Comunicação</strong><span>{avaliacaoForm.communication}%</span></span>
+                  <span className="mb-1 flex justify-between"><strong>Comunicação</strong><span>{avaliacaoForm.communication}%</span></span>
                   <input type="range" min="0" max="100" value={avaliacaoForm.communication} onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, communication: event.target.value })} className="w-full" />
                 </label>
               </div>
@@ -402,28 +412,29 @@ export default function Home() {
                 value={avaliacaoForm.comment}
                 onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, comment: event.target.value })}
                 placeholder="Comentário opcional sobre a rota"
-                className="w-full border rounded-lg px-3 py-2 text-sm min-h-20"
+                className="min-h-20 w-full rounded-lg border px-3 py-2 text-sm"
               />
 
-              <button disabled={avaliando || rotas.length === 0} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+              <button disabled={avaliando || rotas.length === 0} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 py-2 text-sm font-bold text-white disabled:opacity-60">
                 <Send size={16} /> {avaliando ? 'Enviando avaliação...' : 'Enviar avaliação'}
               </button>
             </form>
           </section>
 
           <section>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rotas Ativas</h2>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Rotas Ativas</h2>
             <div className="space-y-4">
+              {rotasFiltradas.length === 0 && !carregando && <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-500">Nenhuma rota ativa encontrada.</p>}
               {rotasFiltradas.map((rota) => {
                 const isDelayed = rota.status === 'Atrasado';
                 const isFavoritando = favoritandoId === String(rota.id);
 
                 return (
-                  <div key={String(rota.id)} className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${isDelayed ? 'border-red-200' : 'hover:border-emerald-500'}`}>
-                    <div className="flex justify-between items-start mb-2 gap-3">
-                      <div>
-                        <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
-                        <p className="text-xs text-gray-500 mt-1">{rota.descricao}</p>
+                  <div key={String(rota.id)} className={`rounded-lg border bg-white p-4 shadow-sm transition-colors ${isDelayed ? 'border-red-200' : 'hover:border-emerald-500'}`}>
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="break-words text-sm font-bold text-gray-800">{rota.nome}</h3>
+                        <p className="mt-1 break-words text-xs text-gray-500">{rota.descricao}</p>
                       </div>
                       <button
                         onClick={() => alternarFavorito(rota)}
@@ -435,15 +446,15 @@ export default function Home() {
                         <Heart size={16} fill={rota.favorita ? 'currentColor' : 'none'} />
                       </button>
                     </div>
-                    <span className={`inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider mb-3 ${isDelayed ? 'bg-red-100 text-red-800' : rota.status === 'Em trânsito' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`mb-3 inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${isDelayed ? 'bg-red-100 text-red-800' : rota.status === 'Em trânsito' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
                       {rota.status}
                     </span>
-                    <div className="flex items-center text-sm text-gray-600 mb-1 gap-2">
+                    <div className="mb-1 flex items-center gap-2 text-sm text-gray-600">
                       {isDelayed ? <AlertTriangle size={14} className="text-red-500" /> : <Clock size={14} className="text-emerald-600" />}
                       {rota.eta}
                     </div>
-                    <div className="flex items-center text-sm text-gray-600 gap-2">
-                      <MapPin size={14} className="text-gray-400" /> {rota.parada}
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <MapPin size={14} className="shrink-0 text-gray-400" /> {rota.parada}
                     </div>
                   </div>
                 );
@@ -452,14 +463,14 @@ export default function Home() {
           </section>
         </div>
 
-        <div className="p-4 border-t bg-gray-50">
-          <button onClick={handleReportar} className="w-full bg-emerald-500 hover:opacity-90 text-white font-medium py-2 rounded-md shadow-sm">
+        <div className="border-t bg-gray-50 p-4">
+          <button onClick={handleReportar} className="w-full rounded-md bg-emerald-500 py-2 font-medium text-white shadow-sm hover:opacity-90">
             Reportar Ocorrência
           </button>
         </div>
       </aside>
 
-      <section className="flex-1 relative h-[50vh] md:h-full p-2 md:p-4 bg-gray-100">
+      <section className="relative h-[55vh] min-h-[360px] bg-gray-100 p-2 md:h-full md:min-h-0 md:flex-1 md:p-4">
         <Map />
       </section>
     </main>
