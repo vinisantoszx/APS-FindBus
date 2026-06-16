@@ -1,7 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bell, BookOpen, BusFront, Clock, GraduationCap, Heart, MapPin, Search, ShieldCheck, UserRound } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  Bell,
+  BookOpen,
+  BusFront,
+  Clock,
+  GraduationCap,
+  Heart,
+  MapPin,
+  Search,
+  Send,
+  ShieldCheck,
+  Star,
+  UserRound,
+} from 'lucide-react';
 import Map from '@/components/Map';
 import { createClient } from '@/utils/supabase/client';
 
@@ -38,11 +52,29 @@ type PerfilEstudante = {
   status: string;
 };
 
+type AvaliacaoForm = {
+  routeId: string;
+  rating: string;
+  punctuality: string;
+  comfort: string;
+  communication: string;
+  comment: string;
+};
+
 const perfilPadrao: PerfilEstudante = {
   nome: 'Estudante FindBus',
   instituicao: 'Universidade Federal do Ceará - Campus Quixadá',
   curso: 'Análise e Projeto de Sistemas',
   status: 'Perfil estudantil para rotas universitárias',
+};
+
+const avaliacaoInicial: AvaliacaoForm = {
+  routeId: '',
+  rating: '5',
+  punctuality: '80',
+  comfort: '80',
+  communication: '80',
+  comment: '',
 };
 
 function formatStatus(status?: string | null): StatusRota {
@@ -82,6 +114,8 @@ export default function Home() {
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [favoritandoId, setFavoritandoId] = useState<string | null>(null);
+  const [avaliando, setAvaliando] = useState(false);
+  const [avaliacaoForm, setAvaliacaoForm] = useState<AvaliacaoForm>(avaliacaoInicial);
   const [erro, setErro] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
@@ -154,6 +188,8 @@ export default function Home() {
 
   const rotasFavoritas = rotas.filter((rota) => rota.favorita);
 
+  const rotaSelecionadaParaAvaliacao = rotas.find((rota) => String(rota.id) === avaliacaoForm.routeId);
+
   const alternarFavorito = async (rota: Rota) => {
     if (!usuarioId) {
       const irParaLogin = window.confirm('Faça login para salvar suas rotas favoritas. Deseja ir para a tela de login agora?');
@@ -193,6 +229,39 @@ export default function Home() {
       );
     } finally {
       setFavoritandoId(null);
+    }
+  };
+
+  const enviarAvaliacao = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!rotaSelecionadaParaAvaliacao) {
+      alert('Selecione uma rota para avaliar.');
+      return;
+    }
+
+    setAvaliando(true);
+
+    try {
+      const { error } = await supabase.from('service_ratings').insert({
+        user_id: usuarioId,
+        route_id: rotaSelecionadaParaAvaliacao.id,
+        rating: Number(avaliacaoForm.rating),
+        punctuality: Number(avaliacaoForm.punctuality),
+        comfort: Number(avaliacaoForm.comfort),
+        communication: Number(avaliacaoForm.communication),
+        comment: avaliacaoForm.comment.trim() || null,
+      });
+
+      if (error) {
+        alert(`Erro ao enviar avaliação: ${error.message}`);
+        return;
+      }
+
+      alert('Avaliação registrada com sucesso. Ela já alimenta os indicadores do admin.');
+      setAvaliacaoForm({ ...avaliacaoInicial, routeId: String(rotaSelecionadaParaAvaliacao.id) });
+    } finally {
+      setAvaliando(false);
     }
   };
 
@@ -275,6 +344,71 @@ export default function Home() {
                 </div>
               ))}
             </div>
+          </section>
+
+          <section>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Avaliar rota</h2>
+            <form onSubmit={enviarAvaliacao} className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+              <select
+                value={avaliacaoForm.routeId}
+                onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, routeId: event.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Selecione uma rota</option>
+                {rotas.map((rota) => (
+                  <option key={String(rota.id)} value={String(rota.id)}>{rota.nome}</option>
+                ))}
+              </select>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">Nota geral</p>
+                <div className="flex gap-1">
+                  {Array.from({ length: 5 }).map((_, index) => {
+                    const nota = index + 1;
+                    const selecionada = Number(avaliacaoForm.rating) >= nota;
+
+                    return (
+                      <button
+                        key={nota}
+                        type="button"
+                        onClick={() => setAvaliacaoForm({ ...avaliacaoForm, rating: String(nota) })}
+                        className={selecionada ? 'text-yellow-500' : 'text-gray-300'}
+                        aria-label={`Avaliar com ${nota} estrela${nota > 1 ? 's' : ''}`}
+                      >
+                        <Star size={22} fill="currentColor" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2 text-xs text-gray-600">
+                <label className="block">
+                  <span className="flex justify-between mb-1"><strong>Pontualidade</strong><span>{avaliacaoForm.punctuality}%</span></span>
+                  <input type="range" min="0" max="100" value={avaliacaoForm.punctuality} onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, punctuality: event.target.value })} className="w-full" />
+                </label>
+                <label className="block">
+                  <span className="flex justify-between mb-1"><strong>Conforto</strong><span>{avaliacaoForm.comfort}%</span></span>
+                  <input type="range" min="0" max="100" value={avaliacaoForm.comfort} onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, comfort: event.target.value })} className="w-full" />
+                </label>
+                <label className="block">
+                  <span className="flex justify-between mb-1"><strong>Comunicação</strong><span>{avaliacaoForm.communication}%</span></span>
+                  <input type="range" min="0" max="100" value={avaliacaoForm.communication} onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, communication: event.target.value })} className="w-full" />
+                </label>
+              </div>
+
+              <textarea
+                value={avaliacaoForm.comment}
+                onChange={(event) => setAvaliacaoForm({ ...avaliacaoForm, comment: event.target.value })}
+                placeholder="Comentário opcional sobre a rota"
+                className="w-full border rounded-lg px-3 py-2 text-sm min-h-20"
+              />
+
+              <button disabled={avaliando || rotas.length === 0} className="w-full bg-gray-900 text-white font-bold rounded-lg py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                <Send size={16} /> {avaliando ? 'Enviando avaliação...' : 'Enviar avaliação'}
+              </button>
+            </form>
           </section>
 
           <section>
