@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Settings,
   Star,
+  Trash2,
   UsersRound,
 } from 'lucide-react';
 import MapView from '@/components/Map';
@@ -316,6 +317,42 @@ export default function AdminDashboard() {
     }
   };
 
+  const excluirRota = async (rota: RouteRecord) => {
+    if (!supabase) {
+      alert(supabaseState.error ?? 'Supabase não configurado.');
+      return;
+    }
+
+    const confirmou = window.confirm(`Excluir a rota "${rota.name}"? Ela deixará de aparecer para o usuário final.`);
+    if (!confirmou) return;
+
+    setSalvando(true);
+
+    try {
+      await Promise.allSettled([
+        supabase.from('route_favorites').delete().eq('route_id', rota.id),
+        supabase.from('stops').update({ route_id: null }).eq('route_id', rota.id),
+        supabase.from('trips').update({ route_id: null }).eq('route_id', rota.id),
+        supabase.from('occurrences').update({ route_id: null }).eq('route_id', rota.id),
+        supabase.from('service_ratings').delete().eq('route_id', rota.id),
+      ]);
+
+      const { error } = await supabase.from('routes').delete().eq('id', rota.id);
+
+      if (error) {
+        alert(`Erro ao excluir rota: ${error.message}`);
+        return;
+      }
+
+      setRotas((rotasAtuais) => rotasAtuais.filter((item) => !sameId(item.id, rota.id)));
+      await carregarDados();
+    } catch (error) {
+      alert(getSupabaseConnectionMessage(error));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
   const criarParada = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -505,10 +542,20 @@ export default function AdminDashboard() {
                     <MapIcon className="text-emerald-600 mb-4" size={32} />
                     <h3 className="text-xl font-bold text-gray-900">{rota.name}</h3>
                     <p className="text-gray-500 mb-4">{rota.description}</p>
-                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
                       <Clock size={16} /> Previsão: {viagem?.eta_next_stop ?? 'Não informada'}
                     </div>
-                    <span className="inline-flex text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold">{rota.active ? 'Ativa' : 'Inativa'}</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-bold">{rota.active ? 'Ativa' : 'Inativa'}</span>
+                      <button
+                        type="button"
+                        onClick={() => excluirRota(rota)}
+                        disabled={salvando || !supabase}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <Trash2 size={14} /> Excluir
+                      </button>
+                    </div>
                   </div>
                 );
               })}
