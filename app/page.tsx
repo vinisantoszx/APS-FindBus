@@ -81,6 +81,7 @@ export default function Home() {
   const [perfil, setPerfil] = useState<PerfilEstudante>(perfilPadrao);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [favoritandoId, setFavoritandoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
@@ -133,7 +134,9 @@ export default function Home() {
           .select('route_id')
           .eq('user_id', user.id);
 
-        if (!favoritesError) {
+        if (favoritesError) {
+          setErro(`As rotas carregaram, mas os favoritos não puderam ser lidos: ${favoritesError.message}`);
+        } else {
           favoriteIds = new Set((favoritesData ?? []).map((favorite) => String(favorite.route_id)));
         }
       }
@@ -153,37 +156,44 @@ export default function Home() {
 
   const alternarFavorito = async (rota: Rota) => {
     if (!usuarioId) {
-      alert('Faça login para salvar rotas favoritas no banco de dados.');
+      const irParaLogin = window.confirm('Faça login para salvar suas rotas favoritas. Deseja ir para a tela de login agora?');
+      if (irParaLogin) window.location.href = '/login';
       return;
     }
 
-    if (rota.favorita) {
-      const { error } = await supabase
-        .from('route_favorites')
-        .delete()
-        .eq('user_id', usuarioId)
-        .eq('route_id', rota.id);
+    setFavoritandoId(String(rota.id));
 
-      if (error) {
-        alert(`Erro ao remover favorito: ${error.message}`);
-        return;
-      }
-    } else {
-      const { error } = await supabase
-        .from('route_favorites')
-        .insert({ user_id: usuarioId, route_id: rota.id });
+    try {
+      if (rota.favorita) {
+        const { error } = await supabase
+          .from('route_favorites')
+          .delete()
+          .eq('user_id', usuarioId)
+          .eq('route_id', rota.id);
 
-      if (error) {
-        alert(`Erro ao salvar favorito: ${error.message}`);
-        return;
+        if (error) {
+          alert(`Erro ao remover favorito: ${error.message}`);
+          return;
+        }
+      } else {
+        const { error } = await supabase
+          .from('route_favorites')
+          .insert({ user_id: usuarioId, route_id: rota.id });
+
+        if (error) {
+          alert(`Erro ao salvar favorito: ${error.message}`);
+          return;
+        }
       }
+
+      setRotas((rotasAtuais) =>
+        rotasAtuais.map((item) =>
+          String(item.id) === String(rota.id) ? { ...item, favorita: !item.favorita } : item,
+        ),
+      );
+    } finally {
+      setFavoritandoId(null);
     }
-
-    setRotas((rotasAtuais) =>
-      rotasAtuais.map((item) =>
-        String(item.id) === String(rota.id) ? { ...item, favorita: !item.favorita } : item,
-      ),
-    );
   };
 
   const handleReportar = async () => {
@@ -272,6 +282,7 @@ export default function Home() {
             <div className="space-y-4">
               {rotasFiltradas.map((rota) => {
                 const isDelayed = rota.status === 'Atrasado';
+                const isFavoritando = favoritandoId === String(rota.id);
 
                 return (
                   <div key={String(rota.id)} className={`bg-white border rounded-lg p-4 shadow-sm transition-colors ${isDelayed ? 'border-red-200' : 'hover:border-emerald-500'}`}>
@@ -280,7 +291,13 @@ export default function Home() {
                         <h3 className="font-bold text-gray-800 text-sm">{rota.nome}</h3>
                         <p className="text-xs text-gray-500 mt-1">{rota.descricao}</p>
                       </div>
-                      <button onClick={() => alternarFavorito(rota)} className={`shrink-0 rounded-full p-2 ${rota.favorita ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-400 hover:text-red-500'}`} aria-label="Favoritar rota">
+                      <button
+                        onClick={() => alternarFavorito(rota)}
+                        disabled={isFavoritando}
+                        className={`shrink-0 rounded-full p-2 disabled:opacity-60 ${rota.favorita ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-400 hover:text-red-500'}`}
+                        aria-label={rota.favorita ? 'Remover rota dos favoritos' : 'Favoritar rota'}
+                        title={rota.favorita ? 'Remover dos favoritos' : 'Salvar nos favoritos'}
+                      >
                         <Heart size={16} fill={rota.favorita ? 'currentColor' : 'none'} />
                       </button>
                     </div>
